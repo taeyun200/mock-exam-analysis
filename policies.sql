@@ -103,3 +103,13 @@ create or replace function list_teachers()
   where is_admin() order by p.school_code nulls first, u.email
 $$;
 revoke execute on function list_teachers() from anon;
+
+-- 수집 단계 검증용. 정답은 감추고 과목별 문항 수만 준다 (회차 개방 전에도 호출 가능).
+create or replace function item_counts(p_exam text)
+  returns table (subject text, n_items int, max_q int)
+  language sql stable security definer set search_path = public as $$
+  select subject, count(*)::int, max(q_no)::int
+  from answer_keys where exam_code = p_exam and auth.uid() is not null
+  group by subject
+$$;
+revoke execute on function item_counts(text) from anon;
