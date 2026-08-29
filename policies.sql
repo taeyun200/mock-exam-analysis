@@ -18,9 +18,9 @@ alter table submissions enable row level security;
 alter table responses   enable row level security;
 
 -- 학교·회차 목록: 로그인한 사람은 읽기만. 쓰기는 운영자.
-create policy read  on schools using (auth.role() = 'authenticated');
+create policy read  on schools for select using (auth.role() = 'authenticated');
 create policy admin on schools for all using (is_admin()) with check (is_admin());
-create policy read  on exams   using (auth.role() = 'authenticated');
+create policy read  on exams   for select using (auth.role() = 'authenticated');
 create policy admin on exams   for all using (is_admin()) with check (is_admin());
 
 -- 자기 프로필만. 학교 배정 변경은 운영자만.
