@@ -1,0 +1,7 @@
+# 학생 데이터·정답표는 절대 커밋하지 않는다 (public 저장소)
+*.csv
+*.xlsx
+*.xls
+# 키
+*key*.txt
+.env*
