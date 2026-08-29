@@ -1,6 +1,15 @@
 -- RLS 정책. schema.sql 실행 후 붙여넣는다.
 -- 원칙: 선생님은 자기 학교 것만, 정답표는 회차 개방 후에만, 운영자는 전부.
 
+-- 재실행 가능하도록 기존 정책을 먼저 모두 제거한다.
+-- 주의: public 스키마의 정책을 전부 지운다. 이 프로젝트 전용 DB에서만 쓸 것.
+do $$
+declare p record;
+begin
+  for p in select policyname, tablename from pg_policies where schemaname = 'public'
+  loop execute format('drop policy %I on public.%I', p.policyname, p.tablename); end loop;
+end $$;
+
 -- security definer = RLS를 우회해 profiles를 읽는다. 정책 안에서 쓰므로 재귀가 없다.
 create or replace function my_school() returns text
   language sql stable security definer set search_path = public as
