@@ -78,3 +78,28 @@ begin
   assert unprotected is null, 'RLS 미적용 테이블: ' || unprotected;
   raise notice 'RLS OK — 모든 public 테이블 보호됨';
 end $$;
+
+-- 이메일로 계정을 찾아 학교에 배정한다. 브라우저는 auth.users를 못 읽으므로 함수로 감싼다.
+create or replace function link_teacher(p_email text, p_school text, p_role text default 'teacher')
+  returns text language plpgsql security definer set search_path = public as $$
+declare uid uuid;
+begin
+  if not is_admin() then raise exception '운영자만 가능합니다'; end if;
+  select id into uid from auth.users where lower(email) = lower(p_email);
+  if uid is null then raise exception '가입되지 않은 이메일입니다: %', p_email; end if;
+  insert into profiles (user_id, school_code, role, display_name)
+       values (uid, p_school, p_role, p_email)
+  on conflict (user_id) do update set school_code = excluded.school_code, role = excluded.role;
+  return uid::text;
+end $$;
+revoke execute on function link_teacher(text,text,text) from anon;
+
+-- 선생님 목록 조회용 (자기 프로필만 보이는 RLS를 운영자에 한해 우회)
+create or replace function list_teachers()
+  returns table (email text, school_code text, role text)
+  language sql security definer set search_path = public as $$
+  select u.email::text, p.school_code, p.role
+  from profiles p join auth.users u on u.id = p.user_id
+  where is_admin() order by p.school_code nulls first, u.email
+$$;
+revoke execute on function list_teachers() from anon;
