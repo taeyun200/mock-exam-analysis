@@ -169,3 +169,34 @@ begin
   assert bad is null, 'security_invoker가 꺼진 뷰: ' || bad;
   raise notice '뷰 OK — 모든 뷰가 호출자 권한으로 동작';
 end $$;
+
+-- ── 우리 학교 상세 (리포트용) ───────────────────────
+-- 뷰를 브라우저에서 직접 조회하면 행마다 RLS가 걸려 3만 행에서 타임아웃이 난다.
+-- 함수로 감싸 학교 필터를 한 번만 적용한다. 반환은 여전히 자기 학교 것뿐이다.
+create index if not exists submissions_school_exam on submissions (school_code, exam_code, subject) where is_active;
+
+create or replace function my_scores(p_exam text)
+returns table (grade int, class_no int, student_no int, subject text,
+               raw_score numeric, n_correct int, n_items int)
+language sql stable security definer set search_path = public as $$
+  select ss.grade, ss.class_no, ss.student_no, ss.subject,
+         ss.raw_score, ss.n_correct::int, ss.n_items::int
+  from student_scores ss
+  where ss.exam_code = p_exam and ss.school_code = (select my_school())
+    and exists (select 1 from exams e where e.exam_code = p_exam and e.is_open and auth.uid() is not null)
+  order by ss.grade, ss.class_no, ss.student_no, ss.subject
+$$;
+revoke execute on function my_scores(text) from anon;
+
+create or replace function my_marks(p_exam text)
+returns table (subject text, grade int, class_no int, student_no int, q_no int,
+               marked text, is_correct boolean)
+language sql stable security definer set search_path = public as $$
+  select c.subject, c.grade, c.class_no, c.student_no, c.q_no, c.marked, c.is_correct
+  from scored c
+  join attempted a using (student_key, exam_code, subject)
+  where c.exam_code = p_exam and c.school_code = (select my_school())
+    and exists (select 1 from exams e where e.exam_code = p_exam and e.is_open and auth.uid() is not null)
+  order by c.subject, c.grade, c.class_no, c.student_no, c.q_no
+$$;
+revoke execute on function my_marks(text) from anon;

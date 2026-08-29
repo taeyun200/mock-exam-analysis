@@ -43,27 +43,28 @@ create policy read_when_open on answer_keys for select using (
 create policy admin on answer_keys for all using (is_admin()) with check (is_admin());
 
 -- 제출: 자기 학교 것만 읽고, 마감 전(is_open = false)에만 새로 넣는다.
-create policy read_own on submissions for select using (school_code = my_school());
+create policy read_own on submissions for select using (school_code = (select my_school()));
 create policy insert_own on submissions for insert with check (
-  school_code = my_school()
+  school_code = (select my_school())
   and exists (select 1 from exams e where e.exam_code = submissions.exam_code and not e.is_open)
 );
 -- 재제출 시 이전 건을 내리기 위한 UPDATE. 마감 전에만.
 create policy update_own on submissions for update using (
-  school_code = my_school()
+  school_code = (select my_school())
   and exists (select 1 from exams e where e.exam_code = submissions.exam_code and not e.is_open)
 );
 create policy admin on submissions for all using (is_admin()) with check (is_admin());
 
 -- 원답안: 소속 제출 건을 통해 권한을 판정한다.
--- ponytail: 행마다 서브쿼리. 수백 명 규모에선 문제없고, 만 명대로 커지면 적재를 RPC로 옮긴다.
+-- exists 상관 서브쿼리 대신 IN + (select ...) 형태를 쓴다. 앞의 것은 행마다 평가되어
+-- 3만 행 적재/조회에서 타임아웃이 났다. 이 형태는 목록을 한 번만 만들어 해시로 맞춘다.
 create policy read_own on responses for select using (
-  exists (select 1 from submissions s where s.id = responses.submission_id and s.school_code = my_school())
+  submission_id in (select s.id from submissions s where s.school_code = (select my_school()))
 );
 create policy insert_own on responses for insert with check (
-  exists (
-    select 1 from submissions s join exams e on e.exam_code = s.exam_code
-    where s.id = responses.submission_id and s.school_code = my_school() and not e.is_open
+  submission_id in (
+    select s.id from submissions s join exams e on e.exam_code = s.exam_code
+    where s.school_code = (select my_school()) and not e.is_open
   )
 );
 create policy admin on responses for all using (is_admin()) with check (is_admin());

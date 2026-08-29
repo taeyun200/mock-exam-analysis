@@ -126,17 +126,6 @@ db.auth.onAuthStateChange(async (_, session) => {
   if (!ex?.length) say($('msg'), '아직 열람 가능한 회차가 없습니다. 회차가 개방되면 볼 수 있습니다.');
 });
 
-// PostgREST는 한 번에 1000행까지만 준다. 정오표는 3만 행이 넘으므로 나눠 받는다.
-async function fetchAll(build) {
-  const out = [];
-  for (let from = 0; ; from += 1000) {
-    const { data, error } = await build().range(from, from + 999);
-    if (error) throw new Error(error.message);
-    out.push(...data);
-    if (data.length < 1000) return out;
-  }
-}
-
 // ── 불러오기 ────────────────────────────────────────
 $('load').onclick = async () => {
   const exam = $('exam').value;
@@ -151,12 +140,12 @@ $('load').onclick = async () => {
     if (e1 || e2) throw new Error((e1 || e2).message);
     if (!items?.length) throw new Error('데이터가 없습니다. 회차가 개방되었고 제출이 있는지 확인하세요.');
 
-    const scores = await fetchAll(() => db.from('student_scores')
-      .select('grade, class_no, student_no, subject, raw_score, n_correct, n_items')
-      .eq('exam_code', exam).order('grade').order('class_no').order('student_no'));
-    const marks = await fetchAll(() => db.from('scored')
-      .select('grade, class_no, student_no, subject, q_no, marked, is_correct')
-      .eq('exam_code', exam).order('subject').order('grade').order('class_no').order('student_no').order('q_no'));
+    // 뷰를 직접 조회하면 행마다 RLS가 걸려 3만 행에서 타임아웃이 난다. 함수로 받는다.
+    const [{ data: scores, error: e3 }, { data: marks, error: e4 }] = await Promise.all([
+      db.rpc('my_scores', { p_exam: exam }),
+      db.rpc('my_marks', { p_exam: exam }),
+    ]);
+    if (e3 || e4) throw new Error((e3 || e4).message);
 
     const dists = {};
     for (const s of [...new Set(items.map(i => i.subject))]) {
