@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>모의고사 OMR 제출</title>
+<style>
+  :root { color-scheme: light; }
+  body { font: 15px/1.6 system-ui, "Malgun Gothic", sans-serif; margin: 0; background: #f6f7f9; color: #1a1d21; }
+  main { max-width: 960px; margin: 0 auto; padding: 24px 20px 80px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 0 0 10px; padding-bottom: 6px; border-bottom: 1px solid #dde1e6; }
+  section { background: #fff; border: 1px solid #dde1e6; border-radius: 8px; padding: 16px 18px; margin-bottom: 18px; }
+  input, select, button { font: inherit; padding: 7px 10px; border: 1px solid #c3c9d0; border-radius: 5px; background: #fff; }
+  button { background: #1a1d21; color: #fff; border-color: #1a1d21; cursor: pointer; }
+  button:hover:not(:disabled) { background: #34383e; }
+  button:disabled { background: #c3c9d0; border-color: #c3c9d0; cursor: not-allowed; }
+  button.ghost { background: #fff; color: #1a1d21; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  table { border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 4px 7px; border-bottom: 1px solid #eceef1; white-space: nowrap; }
+  th { color: #5a626b; font-weight: 600; }
+  .scroll { overflow-x: auto; }
+  .muted { color: #5a626b; font-size: 13px; }
+  .msg { padding: 10px 12px; border-radius: 6px; margin: 10px 0; white-space: pre-wrap; }
+  .msg.err  { background: #fdecec; color: #8c1c1c; }
+  .msg.warn { background: #fff6e5; color: #7a4a00; }
+  .msg.ok   { background: #e8f5ec; color: #14532d; }
+  #drop { border: 2px dashed #c3c9d0; border-radius: 8px; padding: 32px; text-align: center; color: #5a626b; cursor: pointer; }
+  #drop.over { border-color: #1a1d21; background: #f0f1f3; }
+  .receipt { font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>모의고사 OMR 제출</h1>
+  <p class="muted">OMR 리딩 결과 파일을 그대로 올리시면 됩니다. 학생 이름은 저장하지 않습니다.</p>
+
+  <section id="login">
+    <h2>로그인</h2>
+    <form class="row" id="loginForm">
+      <input type="email" id="email" placeholder="이메일" required autocomplete="username">
+      <input type="password" id="pw" placeholder="비밀번호" required autocomplete="current-password">
+      <button>로그인</button>
+    </form>
+    <div id="loginMsg"></div>
+  </section>
+
+  <div id="app" hidden>
+    <section>
+      <div class="row" style="justify-content:space-between;margin:0">
+        <span id="who" class="muted"></span>
+        <button class="ghost" id="logout">로그아웃</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>1. 회차 선택</h2>
+      <div class="row"><select id="exam"></select></div>
+      <div id="examMsg"></div>
+    </section>
+
+    <section>
+      <h2>2. 파일 올리기</h2>
+      <div id="drop">OMR 리딩 결과 파일(.xlsx / .xls / .csv)을 끌어다 놓거나 클릭해서 선택</div>
+      <input type="file" id="file" accept=".xlsx,.xls,.csv" hidden>
+    </section>
+
+    <div id="mapSec" hidden>
+      <section>
+        <h2>3. 열 확인</h2>
+        <p class="muted">자동으로 찾은 결과입니다. 다르면 바꿔주세요.</p>
+        <div class="row">
+          <label>학년 <select id="mGrade"></select></label>
+          <label>반 <select id="mClass"></select></label>
+          <label>번호 <select id="mNo"></select></label>
+          <label>과목 <select id="mSubject"></select></label>
+          <label>첫 문항 <select id="mFirstQ"></select></label>
+          <label>데이터 시작행 <select id="mFirstRow"></select></label>
+        </div>
+        <div class="scroll"><table id="preview"></table></div>
+      </section>
+
+      <section>
+        <h2>4. 검증</h2>
+        <div id="checkMsg"></div>
+        <div class="scroll"><table id="summary"></table></div>
+      </section>
+
+      <section>
+        <h2>5. 제출</h2>
+        <div id="dupMsg"></div>
+        <button id="submit" disabled>제출</button>
+        <div id="subMsg"></div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="config.js"></script>
+<script>
+const SUBJECTS = ['국어', '영어', '수학', '사회', '과학', '한국사'];
+const CHUNK = 1000;
+const db = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+const say = (el, text, kind) => { el.innerHTML = text ? `<div class="msg ${kind || 'err'}">${esc(text)}</div>` : ''; };
+const norm = s => String(s ?? '').replace(/\s/g, '');
+
+let sheet = [];        // 2차원 배열 (원본)
+let me = null;         // { school_code, school_name }
+let parsed = null;     // 검증을 통과한 적재용 데이터
+
+// ── 인증 ────────────────────────────────────────────
+$('loginForm').onsubmit = async e => {
+  e.preventDefault();
+  const { error } = await db.auth.signInWithPassword({ email: $('email').value, password: $('pw').value });
+  if (error) say($('loginMsg'), error.message);
+};
+$('logout').onclick = () => db.auth.signOut();
+
+db.auth.onAuthStateChange(async (_, session) => {
+  if (!session) { $('login').hidden = false; $('app').hidden = true; return; }
+  const { data: p } = await db.from('profiles').select('school_code').eq('user_id', session.user.id).maybeSingle();
+  if (!p?.school_code) {
+    say($('loginMsg'), '학교가 배정되지 않은 계정입니다. 운영자에게 문의하세요.');
+    return db.auth.signOut();
+  }
+  const { data: s } = await db.from('schools').select('school_name').eq('school_code', p.school_code).maybeSingle();
+  me = { school_code: p.school_code, school_name: s?.school_name ?? p.school_code };
+  $('login').hidden = true; $('app').hidden = false;
+  $('who').textContent = `${me.school_name} · ${session.user.email}`;
+  loadExams();
+});
+
+async function loadExams() {
+  const { data } = await db.from('exams').select('*').eq('is_open', false).order('exam_code', { ascending: false });
+  $('exam').innerHTML = (data ?? []).map(x => `<option value="${esc(x.exam_code)}">${esc(x.exam_name)}</option>`).join('');
+  if (!data?.length) say($('examMsg'), '지금 제출 가능한 회차가 없습니다. 운영자에게 문의하세요.');
+}
+$('exam').onchange = () => { if (sheet.length) remap(); };
+
+// ── 파일 읽기 ───────────────────────────────────────
+async function read(file) {
+  const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', raw: false });
+  sheet = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '', blankrows: false });
+  if (sheet.length < 3) return say($('checkMsg'), '내용이 거의 없는 파일입니다.');
+  buildMapUI();
+  remap();
+}
+$('drop').onclick = () => $('file').click();
+$('file').onchange = e => e.target.files[0] && read(e.target.files[0]);
+$('drop').ondragover = e => { e.preventDefault(); $('drop').classList.add('over'); };
+$('drop').ondragleave = () => $('drop').classList.remove('over');
+$('drop').ondrop = e => { e.preventDefault(); $('drop').classList.remove('over'); read(e.dataTransfer.files[0]); };
+
+// ── 열 자동 인식 ────────────────────────────────────
+function detect() {
+  const width = Math.max(...sheet.slice(0, 5).map(r => r.length));
+  const hdr = sheet.findIndex(r => r.some(c => norm(c) === '과목'));
+  const find = names => {
+    if (hdr < 0) return -1;
+    return sheet[hdr].findIndex(c => names.includes(norm(c)));
+  };
+  const grade = find(['학년']), cls = find(['반']), no = find(['번호']), subject = find(['과목']);
+  // '문항별 표기' 같은 그룹 헤더가 있으면 그 열, 없으면 과목 열 다음
+  let firstQ = hdr < 0 ? -1 : sheet[hdr].findIndex(c => /문항별.*(표기|응답|마킹)/.test(norm(c)));
+  if (firstQ < 0) firstQ = Math.max(grade, cls, no, subject) + 1;
+  // 헤더 다음 행이 전부 숫자면 그것도 헤더(문항번호 행)
+  let firstRow = hdr + 1;
+  while (firstRow < sheet.length && sheet[firstRow].slice(firstQ, firstQ + 5).every(c => /^\d+$/.test(String(c).trim()))
+         && !String(sheet[firstRow][subject] ?? '').trim()) firstRow++;
+  return { width, hdr, grade, cls, no, subject, firstQ, firstRow };
+}
+
+function buildMapUI() {
+  const d = detect();
+  const label = i => `${XLSX.utils.encode_col(i)} — ${String(sheet[d.hdr]?.[i] ?? '').replace(/\s+/g, ' ').trim() || '(빈 제목)'}`;
+  const opts = (sel, val) => {
+    sel.innerHTML = Array.from({ length: d.width }, (_, i) => `<option value="${i}">${esc(label(i))}</option>`).join('');
+    sel.value = Math.max(0, val);
+  };
+  opts($('mGrade'), d.grade); opts($('mClass'), d.cls); opts($('mNo'), d.no);
+  opts($('mSubject'), d.subject); opts($('mFirstQ'), d.firstQ);
+  $('mFirstRow').innerHTML = sheet.map((_, i) => `<option value="${i}">${i + 1}행</option>`).join('');
+  $('mFirstRow').value = d.firstRow;
+  ['mGrade', 'mClass', 'mNo', 'mSubject', 'mFirstQ', 'mFirstRow'].forEach(id => $(id).onchange = remap);
+  $('mapSec').hidden = false;
+}
+
+// ── 파싱 + 검증 ─────────────────────────────────────
+async function remap() {
+  const m = {
+    grade: +$('mGrade').value, cls: +$('mClass').value, no: +$('mNo').value,
+    subject: +$('mSubject').value, firstQ: +$('mFirstQ').value, firstRow: +$('mFirstRow').value,
+  };
+  showPreview(m);
+
+  const exam = $('exam').value;
+  if (!exam) return fail('회차를 먼저 선택하세요.');
+  const { data: counts, error } = await db.rpc('item_counts', { p_exam: exam });
+  if (error) return fail('문항 수 조회 실패: ' + error.message);
+  if (!counts?.length) return fail('이 회차의 정답표가 아직 등록되지 않았습니다. 운영자에게 문의하세요.');
+  const need = Object.fromEntries(counts.map(c => [c.subject, c.n_items]));
+  // 단답형은 '15', '047'처럼 여러 자리가 정상이므로 복수 마킹 판정에서 제외한다.
+  const sa = Object.fromEntries(counts.map(c => [c.subject, new Set(c.sa_items ?? [])]));
+
+  const errors = [], warns = [], rows = [], seen = new Set(), stat = {};
+  for (let r = m.firstRow; r < sheet.length; r++) {
+    const line = sheet[r];
+    const subject = String(line[m.subject] ?? '').trim();
+    if (!subject && !String(line[m.no] ?? '').trim()) continue;   // 빈 행
+    const at = `${r + 1}행`;
+
+    if (!SUBJECTS.includes(subject)) { errors.push(`${at}: 알 수 없는 과목 '${subject}'`); continue; }
+    if (!(subject in need)) { errors.push(`${at}: '${subject}' 정답표가 등록되지 않았습니다`); continue; }
+    const g = +String(line[m.grade] ?? '').trim(), c = +String(line[m.cls] ?? '').trim(), n = +String(line[m.no] ?? '').trim();
+    if (![g, c, n].every(Number.isInteger)) { errors.push(`${at}: 학년/반/번호를 읽을 수 없음 (${line[m.grade]}, ${line[m.cls]}, ${line[m.no]})`); continue; }
+
+    const key = `${subject}-${g}-${c}-${n}`;
+    if (seen.has(key)) { errors.push(`${at}: 학번 중복 — ${subject} ${g}학년 ${c}반 ${n}번`); continue; }
+    seen.add(key);
+
+    const s = stat[subject] ??= { students: 0, blank: 0, cells: 0, absent: 0, multi: [] };
+    s.students++;
+    let blanks = 0;
+    for (let q = 1; q <= need[subject]; q++) {
+      const raw = String(line[m.firstQ + q - 1] ?? '').trim();
+      s.cells++;
+      if (!raw) { blanks++; s.blank++; continue; }
+      // 정상: 객관식은 한 자리 1~5, 단답형은 숫자. 그 밖은 복수 마킹('45','*2')이나
+      // 자리 누락('1 3')이며, 원본 그대로 저장해 채점에서 오답이 되게 둔다(리딩 업체 처리와 동일).
+      const okay = sa[subject].has(q) ? /^\d+$/.test(raw) : /^[1-5]$/.test(raw);
+      if (!okay) s.multi.push(`${g}학년 ${c}반 ${n}번 ${subject} ${q}번: '${raw}'`);
+      rows.push({ grade: g, class_no: c, student_no: n, q_no: q, marked: raw, _s: subject });
+    }
+    if (blanks === need[subject]) s.absent++;
+  }
+
+  for (const [subject, n] of Object.entries(need)) {
+    if (!stat[subject]) warns.push(`${subject}: 파일에 응답이 없습니다 (정답표는 ${n}문항)`);
+  }
+  const abnormal = Object.values(stat).flatMap(s => s.multi);
+  if (abnormal.length) warns.push(
+    `비정상 마킹 ${abnormal.length}건 — 복수 마킹이거나 자리가 비었습니다. 오답으로 채점됩니다.\n` +
+    `OMR 원본과 대조해 리딩 오류라면 다시 읽혀 주세요.\n  ` +
+    abnormal.slice(0, 10).join('\n  ') + (abnormal.length > 10 ? `\n  … 외 ${abnormal.length - 10}건` : ''));
+
+  renderSummary(stat, need);
+  if (errors.length) return fail(`${errors.length}건의 오류로 제출할 수 없습니다.\n\n` + errors.slice(0, 20).join('\n'));
+
+  parsed = { exam, rows, stat };
+  const w = warns.length ? warns.join('\n\n') + '\n\n' : '';
+  say($('checkMsg'), w + `검증 통과 — ${Object.keys(stat).length}개 과목, ${rows.length.toLocaleString()}개 응답`, warns.length ? 'warn' : 'ok');
+  await checkExisting();
+}
+
+function fail(msg) { parsed = null; $('submit').disabled = true; say($('checkMsg'), msg); }
+
+function showPreview(m) {
+  const head = sheet[Math.max(0, m.firstRow - 1)] ?? [];
+  const cols = [m.grade, m.cls, m.no, m.subject, ...Array.from({ length: 8 }, (_, i) => m.firstQ + i)];
+  const cell = (r, i) => `<td>${esc(String(r?.[i] ?? '').trim())}</td>`;
+  $('preview').innerHTML =
+    '<tr><th>학년</th><th>반</th><th>번호</th><th>과목</th>' +
+    Array.from({ length: 8 }, (_, i) => `<th>${esc(String(head[m.firstQ + i] ?? (i + 1)))}</th>`).join('') + '<th>…</th></tr>' +
+    sheet.slice(m.firstRow, m.firstRow + 8).map(r => '<tr>' + cols.map(i => cell(r, i)).join('') + '<td>…</td></tr>').join('');
+}
+
+function renderSummary(stat, need) {
+  $('summary').innerHTML = '<tr><th>과목</th><th>정답표 문항</th><th>응시</th><th>결시(전 문항 무응답)</th><th>무응답률</th></tr>' +
+    Object.entries(stat).map(([s, v]) => `<tr><td>${esc(s)}</td><td>${need[s]}</td><td>${v.students}</td>
+      <td>${v.absent}</td><td>${(v.blank / v.cells * 100).toFixed(1)}%</td></tr>`).join('');
+}
+
+// ── 기존 제출 확인 ──────────────────────────────────
+async function checkExisting() {
+  const { data } = await db.from('submissions').select('subject, submitted_at, row_count')
+    .eq('exam_code', parsed.exam).eq('school_code', me.school_code).eq('is_active', true);
+  parsed.replacing = data ?? [];
+  if (data?.length) {
+    const when = new Date(data[0].submitted_at).toLocaleString('ko-KR');
+    say($('dupMsg'), `이미 제출된 건이 있습니다 (${when}, ${data.map(d => d.subject).join('·')}).\n제출하면 이전 건을 대체합니다. 이전 데이터는 삭제되지 않고 보관됩니다.`, 'warn');
+  } else say($('dupMsg'), '');
+  $('submit').disabled = false;
+}
+
+// ── 제출 ────────────────────────────────────────────
+$('submit').onclick = async () => {
+  if (!parsed) return;
+  if (parsed.replacing.length && !confirm('이전 제출을 대체합니다. 계속할까요?')) return;
+  $('submit').disabled = true;
+  const created = [];
+  try {
+    for (const [subject, s] of Object.entries(parsed.stat)) {
+      const old = parsed.replacing.find(x => x.subject === subject);
+      if (old) {
+        const { error } = await db.from('submissions').update({ is_active: false })
+          .eq('exam_code', parsed.exam).eq('school_code', me.school_code).eq('subject', subject).eq('is_active', true);
+        if (error) throw new Error(`${subject} 이전 제출 정리 실패: ${error.message}`);
+      }
+      const { data: sub, error } = await db.from('submissions')
+        .insert({ exam_code: parsed.exam, school_code: me.school_code, subject, row_count: s.students })
+        .select('id').single();
+      if (error) throw new Error(`${subject} 제출 생성 실패: ${error.message}`);
+      created.push({ subject, id: sub.id });
+
+      const mine = parsed.rows.filter(r => r._s === subject)
+        .map(({ _s, ...r }) => ({ ...r, submission_id: sub.id }));
+      for (let i = 0; i < mine.length; i += CHUNK) {
+        say($('subMsg'), `${subject} 적재 중… ${Math.min(i + CHUNK, mine.length).toLocaleString()} / ${mine.length.toLocaleString()}`, 'warn');
+        const { error: e2 } = await db.from('responses').insert(mine.slice(i, i + CHUNK));
+        if (e2) throw new Error(`${subject} 적재 실패: ${e2.message}`);
+      }
+    }
+  } catch (err) {
+    // 부분 적재를 남기지 않는다. submissions를 지우면 responses도 cascade로 사라진다.
+    for (const c of created) await db.from('submissions').delete().eq('id', c.id);
+    $('submit').disabled = false;
+    return say($('subMsg'), err.message + '\n\n적재된 내용을 되돌렸습니다. 다시 시도하세요.');
+  }
+  $('subMsg').innerHTML = `<div class="msg ok">제출 완료 — 아래 접수번호를 캡처해 보관하세요.
+<table class="receipt">${created.map(c => `<tr><td>${esc(c.subject)}</td><td>${esc(c.id)}</td></tr>`).join('')}</table>
+${esc(new Date().toLocaleString('ko-KR'))} · ${esc(me.school_name)}</div>`;
+  say($('checkMsg'), ''); $('mapSec').hidden = true;
+};
+</script>
+</body>
+</html>

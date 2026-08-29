@@ -5,3 +5,4 @@
 # 키
 *key*.txt
 .env*
+node_modules/
