@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>모의고사 분석 — 운영자</title>
+<style>
+  :root { color-scheme: light; }
+  body { font: 15px/1.6 system-ui, "Malgun Gothic", sans-serif; margin: 0; background: #f6f7f9; color: #1a1d21; }
+  main { max-width: 900px; margin: 0 auto; padding: 24px 20px 80px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 0 0 10px; padding-bottom: 6px; border-bottom: 1px solid #dde1e6; }
+  section { background: #fff; border: 1px solid #dde1e6; border-radius: 8px; padding: 16px 18px; margin-bottom: 18px; }
+  input, select, button { font: inherit; padding: 7px 10px; border: 1px solid #c3c9d0; border-radius: 5px; background: #fff; }
+  button { background: #1a1d21; color: #fff; border-color: #1a1d21; cursor: pointer; }
+  button:hover { background: #34383e; }
+  button.ghost { background: #fff; color: #1a1d21; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eceef1; }
+  th { color: #5a626b; font-weight: 600; }
+  .muted { color: #5a626b; font-size: 13px; }
+  .msg { padding: 10px 12px; border-radius: 6px; margin: 10px 0; white-space: pre-wrap; }
+  .msg.err { background: #fdecec; color: #8c1c1c; }
+  .msg.ok  { background: #e8f5ec; color: #14532d; }
+  #drop { border: 2px dashed #c3c9d0; border-radius: 8px; padding: 28px; text-align: center; color: #5a626b; cursor: pointer; }
+  #drop.over { border-color: #1a1d21; background: #f0f1f3; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>모의고사 분석 — 운영자</h1>
+  <p class="muted">학교·회차 관리, 정답표 업로드, 선생님 계정 배정</p>
+
+  <section id="login">
+    <h2>로그인</h2>
+    <form class="row" id="loginForm">
+      <input type="email" id="email" placeholder="이메일" required autocomplete="username">
+      <input type="password" id="pw" placeholder="비밀번호" required autocomplete="current-password">
+      <button>로그인</button>
+    </form>
+    <div id="loginMsg"></div>
+  </section>
+
+  <div id="app" hidden>
+    <section>
+      <div class="row" style="justify-content:space-between;margin:0">
+        <span id="who" class="muted"></span>
+        <button class="ghost" id="logout">로그아웃</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>학교</h2>
+      <form class="row" id="schoolForm">
+        <input id="sCode" placeholder="학교코드" required size="12">
+        <input id="sName" placeholder="학교명" required>
+        <input id="sDist" placeholder="시·군" size="10">
+        <button>추가</button>
+      </form>
+      <table id="schoolTable"></table>
+    </section>
+
+    <section>
+      <h2>회차</h2>
+      <form class="row" id="examForm">
+        <input id="eCode" placeholder="2026-09" required size="10">
+        <input id="eName" placeholder="회차 이름" required>
+        <input id="eDate" type="date">
+        <input id="eGrade" type="number" placeholder="학년" style="width:80px">
+        <button>추가</button>
+      </form>
+      <p class="muted">개방 = 정답표·리포트 열람 허용. 개방하면 새 제출이 막힙니다.</p>
+      <table id="examTable"></table>
+    </section>
+
+    <section>
+      <h2>정답·배점표 업로드</h2>
+      <p class="muted">헤더: exam_code, subject, q_no, answer, points, q_type, unit —
+        같은 (회차·과목)을 다시 올리면 통째로 교체됩니다(정답 정정용).</p>
+      <div id="drop">CSV 파일을 여기에 끌어다 놓거나 클릭해서 선택</div>
+      <input type="file" id="file" accept=".csv" hidden>
+      <div id="keyMsg"></div>
+    </section>
+
+    <section>
+      <h2>선생님 계정 배정</h2>
+      <p class="muted">먼저 Supabase 대시보드 Authentication에서 계정을 만든 뒤, 여기서 학교를 붙입니다.</p>
+      <form class="row" id="linkForm">
+        <input type="email" id="tEmail" placeholder="선생님 이메일" required>
+        <select id="tSchool"></select>
+        <select id="tRole"><option value="teacher">선생님</option><option value="admin">운영자</option></select>
+        <button>배정</button>
+      </form>
+      <div id="linkMsg"></div>
+      <table id="teacherTable"></table>
+    </section>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="config.js"></script>
+<script>
+const SUBJECTS = ['국어','영어','수학','사회','과학','한국사'];
+const db = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+const $ = id => document.getElementById(id);
+const say = (el, text, ok) => { el.innerHTML = text ? `<div class="msg ${ok ? 'ok' : 'err'}">${esc(text)}</div>` : ''; };
+const esc = s => String(s ?? '').replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+
+// ── 인증 ────────────────────────────────────────────
+$('loginForm').onsubmit = async e => {
+  e.preventDefault();
+  const { error } = await db.auth.signInWithPassword({ email: $('email').value, password: $('pw').value });
+  if (error) say($('loginMsg'), error.message);
+};
+$('logout').onclick = () => db.auth.signOut();
+
+db.auth.onAuthStateChange(async (_, session) => {
+  if (!session) { $('login').hidden = false; $('app').hidden = true; return; }
+  const { data: me } = await db.from('profiles').select('role').eq('user_id', session.user.id).maybeSingle();
+  if (me?.role !== 'admin') {
+    say($('loginMsg'), "운영자 계정이 아닙니다. 대시보드에서 profiles에 role='admin'을 넣으세요.");
+    return db.auth.signOut();
+  }
+  $('login').hidden = true; $('app').hidden = false;
+  $('who').textContent = session.user.email + ' (운영자)';
+  loadAll();
+});
+
+async function loadAll() { await Promise.all([loadSchools(), loadExams(), loadTeachers()]); }
+
+// ── 학교 ────────────────────────────────────────────
+async function loadSchools() {
+  const { data } = await db.from('schools').select('*').order('school_code');
+  $('schoolTable').innerHTML = '<tr><th>코드</th><th>학교명</th><th>시·군</th></tr>' +
+    (data ?? []).map(s => `<tr><td>${esc(s.school_code)}</td><td>${esc(s.school_name)}</td><td>${esc(s.district)}</td></tr>`).join('');
+  $('tSchool').innerHTML = '<option value="">(학교 없음)</option>' +
+    (data ?? []).map(s => `<option value="${esc(s.school_code)}">${esc(s.school_name)}</option>`).join('');
+}
+$('schoolForm').onsubmit = async e => {
+  e.preventDefault();
+  const { error } = await db.from('schools').insert({
+    school_code: $('sCode').value.trim(), school_name: $('sName').value.trim(), district: $('sDist').value.trim() || null });
+  if (error) return alert(error.message);
+  e.target.reset(); loadSchools();
+};
+
+// ── 회차 ────────────────────────────────────────────
+async function loadExams() {
+  const { data } = await db.from('exams').select('*').order('exam_code', { ascending: false });
+  $('examTable').innerHTML = '<tr><th>코드</th><th>이름</th><th>일자</th><th>학년</th><th>상태</th></tr>' +
+    (data ?? []).map(x => `<tr><td>${esc(x.exam_code)}</td><td>${esc(x.exam_name)}</td><td>${esc(x.exam_date)}</td>
+      <td>${esc(x.grade)}</td><td><button class="ghost" data-code="${esc(x.exam_code)}" data-to="${!x.is_open}">
+      ${x.is_open ? '개방됨 → 닫기' : '수집중 → 개방'}</button></td></tr>`).join('');
+  $('examTable').querySelectorAll('[data-code]').forEach(b => b.onclick = async () => {
+    const to = b.dataset.to === 'true';
+    if (to && !confirm('개방하면 새 제출이 막히고 정답·리포트가 열립니다. 모든 학교가 제출했나요?')) return;
+    const { error } = await db.from('exams').update({ is_open: to }).eq('exam_code', b.dataset.code);
+    if (error) alert(error.message); else loadExams();
+  });
+}
+$('examForm').onsubmit = async e => {
+  e.preventDefault();
+  const { error } = await db.from('exams').insert({
+    exam_code: $('eCode').value.trim(), exam_name: $('eName').value.trim(),
+    exam_date: $('eDate').value || null, grade: $('eGrade').value || null });
+  if (error) return alert(error.message);
+  e.target.reset(); loadExams();
+};
+
+// ── 정답표 ──────────────────────────────────────────
+function validate(rows) {
+  const need = ['exam_code', 'subject', 'q_no', 'answer', 'points', 'q_type'];
+  const missing = need.filter(c => !(c in (rows[0] ?? {})));
+  if (missing.length) return { errors: ['헤더 누락: ' + missing.join(', ')], groups: {} };
+
+  const errors = [], groups = {};
+  rows.forEach((r, i) => {
+    const at = `${i + 2}행`;
+    if (!SUBJECTS.includes(r.subject)) errors.push(`${at}: 알 수 없는 과목 '${r.subject}'`);
+    if (!Number.isInteger(+r.q_no) || +r.q_no < 1) errors.push(`${at}: 문항번호가 잘못됨 '${r.q_no}'`);
+    if (!(+r.points > 0)) errors.push(`${at}: 배점이 잘못됨 '${r.points}'`);
+    if (!['MC', 'SA'].includes(r.q_type)) errors.push(`${at}: q_type은 MC 또는 SA ('${r.q_type}')`);
+    const ans = String(r.answer ?? '').trim();
+    if (!ans) errors.push(`${at}: 정답이 비어 있음`);
+    if (r.q_type === 'SA' && ans !== '*' && !/^\d+(\|\d+)*$/.test(ans))
+      errors.push(`${at}: 단답형 정답은 숫자여야 함 '${ans}'`);
+    if (r.q_type === 'MC' && ans !== '*' && !/^[1-5](\|[1-5])*$/.test(ans))
+      errors.push(`${at}: 객관식 정답은 1~5여야 함 '${ans}'`);
+    (groups[`${r.exam_code}/${r.subject}`] ??= []).push(+r.q_no);
+  });
+
+  for (const [key, nos] of Object.entries(groups)) {
+    const dup = [...new Set(nos.filter((n, i) => nos.indexOf(n) !== i))];
+    if (dup.length) errors.push(`${key}: 문항번호 중복 ${dup.join(', ')}`);
+    const max = Math.max(...nos);
+    const gaps = Array.from({ length: max }, (_, i) => i + 1).filter(n => !nos.includes(n));
+    if (gaps.length) errors.push(`${key}: 문항번호 빠짐 ${gaps.join(', ')} (1~${max} 중)`);
+  }
+  return { errors, groups };
+}
+
+async function upload(file) {
+  say($('keyMsg'), '');
+  const text = (await file.text()).replace(/^﻿/, '');
+  const { data: rows } = Papa.parse(text, { header: true, skipEmptyLines: true });
+  if (!rows.length) return say($('keyMsg'), '빈 파일입니다.');
+
+  const { errors, groups } = validate(rows);
+  if (errors.length) return say($('keyMsg'), `${errors.length}건의 오류로 중단했습니다.\n\n` + errors.slice(0, 20).join('\n'));
+
+  const summary = Object.entries(groups).map(([k, v]) => `${k} ${v.length}문항`).join(' / ');
+  if (!confirm(`다음을 적용합니다. 같은 회차·과목의 기존 정답표는 삭제됩니다.\n\n${summary}`)) return;
+
+  for (const key of Object.keys(groups)) {
+    const [exam_code, subject] = key.split('/');
+    const { error } = await db.from('answer_keys').delete().eq('exam_code', exam_code).eq('subject', subject);
+    if (error) return say($('keyMsg'), `기존 정답표 삭제 실패 (${key}): ${error.message}`);
+  }
+  const payload = rows.map(r => ({
+    exam_code: r.exam_code, subject: r.subject, q_no: +r.q_no,
+    answer: String(r.answer).trim(), points: +r.points, q_type: r.q_type, unit: r.unit || null
+  }));
+  const { error } = await db.from('answer_keys').insert(payload);
+  say($('keyMsg'), error ? error.message : `${payload.length}문항 등록 완료 — ${summary}`, !error);
+}
+
+$('drop').onclick = () => $('file').click();
+$('file').onchange = e => e.target.files[0] && upload(e.target.files[0]);
+$('drop').ondragover = e => { e.preventDefault(); $('drop').classList.add('over'); };
+$('drop').ondragleave = () => $('drop').classList.remove('over');
+$('drop').ondrop = e => { e.preventDefault(); $('drop').classList.remove('over'); upload(e.dataTransfer.files[0]); };
+
+// ── 계정 배정 ───────────────────────────────────────
+async function loadTeachers() {
+  const { data } = await db.rpc('list_teachers');
+  $('teacherTable').innerHTML = '<tr><th>이메일</th><th>학교</th><th>권한</th></tr>' +
+    (data ?? []).map(t => `<tr><td>${esc(t.email)}</td><td>${esc(t.school_code)}</td><td>${esc(t.role)}</td></tr>`).join('');
+}
+$('linkForm').onsubmit = async e => {
+  e.preventDefault();
+  const { error } = await db.rpc('link_teacher', {
+    p_email: $('tEmail').value.trim(), p_school: $('tSchool').value || null, p_role: $('tRole').value });
+  say($('linkMsg'), error ? error.message : '배정 완료', !error);
+  if (!error) { e.target.reset(); loadTeachers(); }
+};
+</script>
+</body>
+</html>
