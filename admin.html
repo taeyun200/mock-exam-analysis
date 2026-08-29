@@ -108,7 +108,7 @@
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script src="config.js"></script>
 <script>
-const SUBJECTS = ['국어','영어','수학','사회','과학','한국사'];
+const SUBJECTS = ['국어', '수학', '영어', '한국사', '사회', '과학'];   // 표시 순서 고정
 const db = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
 const $ = id => document.getElementById(id);
 const say = (el, text, ok) => { el.innerHTML = text ? `<div class="msg ${ok ? 'ok' : 'err'}">${esc(text)}</div>` : ''; };

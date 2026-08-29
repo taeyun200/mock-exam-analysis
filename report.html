@@ -5,37 +5,72 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>모의고사 분석 리포트</title>
 <style>
-  :root { color-scheme: light; }
-  body { font: 15px/1.6 system-ui, "Malgun Gothic", sans-serif; margin: 0; background: #f6f7f9; color: #1a1d21; }
-  main { max-width: 1100px; margin: 0 auto; padding: 24px 20px 80px; }
+  :root {
+    color-scheme: light;
+    --surface: #ffffff;
+    --ground: #f6f7f9;
+    --line: #dde1e6;
+    --grid: #eceef1;
+    --ink: #1a1d21;
+    --ink-2: #5a626b;
+    --series-1: #2a78d6;   /* 우리 학교 */
+    --series-2: #eb6834;   /* 전체 */
+    --critical: #d03b3b;
+    --good: #0ca30c;
+  }
+  body { font: 15px/1.6 system-ui, "Malgun Gothic", sans-serif; margin: 0; background: var(--ground); color: var(--ink); }
+  main { max-width: 1140px; margin: 0 auto; padding: 24px 20px 80px; }
   h1 { font-size: 20px; margin: 0 0 4px; }
-  h2 { font-size: 16px; margin: 0 0 10px; padding-bottom: 6px; border-bottom: 1px solid #dde1e6; }
-  section { background: #fff; border: 1px solid #dde1e6; border-radius: 8px; padding: 16px 18px; margin-bottom: 18px; }
+  h2 { font-size: 16px; margin: 0 0 4px; }
+  h2 + .muted { margin: 0 0 12px; }
+  section { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; margin-bottom: 18px; }
   input, select, button { font: inherit; padding: 7px 10px; border: 1px solid #c3c9d0; border-radius: 5px; background: #fff; }
-  button { background: #1a1d21; color: #fff; border-color: #1a1d21; cursor: pointer; }
+  button { background: var(--ink); color: #fff; border-color: var(--ink); cursor: pointer; }
   button:hover:not(:disabled) { background: #34383e; }
   button:disabled { background: #c3c9d0; border-color: #c3c9d0; cursor: not-allowed; }
-  button.ghost { background: #fff; color: #1a1d21; }
+  button.ghost { background: #fff; color: var(--ink); }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
   table { border-collapse: collapse; font-size: 13px; width: 100%; }
-  th, td { text-align: right; padding: 5px 8px; border-bottom: 1px solid #eceef1; white-space: nowrap; }
+  th, td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
   th:first-child, td:first-child, th.l, td.l { text-align: left; }
-  th { color: #5a626b; font-weight: 600; position: sticky; top: 0; background: #fff; }
-  .scroll { overflow-x: auto; max-height: 560px; overflow-y: auto; }
-  .muted { color: #5a626b; font-size: 13px; }
+  th { color: var(--ink-2); font-weight: 600; position: sticky; top: 0; background: var(--surface); }
+  .scroll { overflow-x: auto; max-height: 520px; overflow-y: auto; }
+  .muted { color: var(--ink-2); font-size: 13px; }
   .msg { padding: 10px 12px; border-radius: 6px; margin: 10px 0; white-space: pre-wrap; }
   .msg.err { background: #fdecec; color: #8c1c1c; }
   .msg.ok  { background: #e8f5ec; color: #14532d; }
-  .flag { background: #fdecec; }        /* 우리 학교가 전체보다 크게 낮은 문항 */
-  .good { background: #e8f5ec; }
-  .weak { color: #8c1c1c; font-weight: 600; }
+
+  /* 지표 타일 */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  .tile { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+  .tile .k { font-size: 12px; color: var(--ink-2); }
+  .tile .v { font-size: 26px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.25; }
+  .tile .s { font-size: 12px; color: var(--ink-2); }
+
+  /* 범례 */
+  .legend { display: flex; gap: 16px; font-size: 13px; color: var(--ink-2); margin-bottom: 6px; }
+  .legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 5px; vertical-align: -1px; }
+
+  svg { display: block; max-width: 100%; }
+  svg text { fill: var(--ink-2); font-size: 11px; }
+  svg text.val { fill: var(--ink); font-size: 11px; }
+  svg .axis { stroke: var(--line); stroke-width: 1; }
+  svg .grid { stroke: var(--grid); stroke-width: 1; }
+  svg .mark:hover { stroke: var(--ink); stroke-width: 2; }
+
+  #tip { position: fixed; pointer-events: none; background: var(--ink); color: #fff; font-size: 12px;
+         padding: 6px 9px; border-radius: 5px; opacity: 0; transition: opacity .1s; z-index: 10; white-space: pre; }
+  .flag { background: #fdecec; }
+  .good-bg { background: #e8f5ec; }
+  .weak { color: var(--critical); font-weight: 600; }
   [hidden] { display: none !important; }
 </style>
 </head>
 <body>
+<div id="tip"></div>
 <main>
   <h1>모의고사 분석 리포트</h1>
-  <p class="muted">문항분석과 학교별 결과. 학생은 학년·반·번호로만 표시됩니다.</p>
+  <p class="muted">학생은 학년·반·번호로만 표시됩니다. 이름은 수집하지 않습니다.</p>
 
   <section id="login">
     <h2>로그인</h2>
@@ -64,30 +99,62 @@
       <div id="msg"></div>
     </section>
 
-    <section id="sumSec" hidden>
-      <h2>과목별 요약</h2>
-      <div class="scroll"><table id="sumTable"></table></div>
-    </section>
+    <div id="dash" hidden>
+      <section>
+        <h2>한눈에 보기</h2>
+        <p class="muted" id="dashSub"></p>
+        <div class="tiles" id="tiles"></div>
+      </section>
 
-    <section id="itemSec" hidden>
-      <h2>문항분석</h2>
-      <div class="row">
-        <select id="subject"></select>
-        <span class="muted">정답률이 전체보다 10%p 이상 낮은 문항은 붉게 표시됩니다.</span>
-      </div>
-      <div class="scroll"><table id="itemTable"></table></div>
-    </section>
+      <section>
+        <h2>과목별 평균</h2>
+        <p class="muted">우리 학교와 참여교 전체의 원점수 평균입니다.</p>
+        <div class="legend">
+          <span><i style="background:var(--series-1)"></i>우리 학교</span>
+          <span><i style="background:var(--series-2)"></i>전체</span>
+        </div>
+        <div class="scroll" style="max-height:none"><div id="cmpChart"></div></div>
+      </section>
 
-    <section id="distSec" hidden>
-      <h2>오답지 매력도</h2>
-      <p class="muted">상위 27%가 특정 오답에 몰린 문항이 먼저 나옵니다 — 출제·수업 개선에서 가장 값진 신호입니다.</p>
-      <div class="scroll"><table id="distTable"></table></div>
-    </section>
+      <section>
+        <h2>먼저 볼 문항</h2>
+        <p class="muted">우리 학교 정답률이 전체보다 크게 낮은 문항입니다. 수업에서 먼저 다룰 순서로 정렬했습니다.</p>
+        <div class="scroll"><table id="prioTable"></table></div>
+      </section>
 
-    <section id="stuSec" hidden>
-      <h2>학생별 원점수</h2>
-      <div class="scroll"><table id="stuTable"></table></div>
-    </section>
+      <section>
+        <h2>상위권이 몰린 오답</h2>
+        <p class="muted">상위 27% 학생이 하위 27%보다 더 많이 고른 오답입니다. 개념 오해나 출제 문제를 드러내는 가장 값진 신호입니다.</p>
+        <div class="scroll"><table id="attnTable"></table></div>
+      </section>
+
+      <section>
+        <h2>과목별 상세</h2>
+        <div class="row"><select id="subject"></select></div>
+
+        <h2 style="margin-top:18px">문항 품질 맵</h2>
+        <p class="muted">가로는 전체 정답률, 세로는 변별도입니다. 아래쪽(변별도 0.2 미만)은 잘 가르는 문항이 아니고,
+          붉은 점은 우리 학교가 전체보다 10%p 이상 낮은 문항입니다.</p>
+        <div id="qmap"></div>
+
+        <h2 style="margin-top:18px">반별 평균</h2>
+        <div id="classChart"></div>
+
+        <h2 style="margin-top:18px">문항별 수치</h2>
+        <div class="scroll"><table id="itemTable"></table></div>
+      </section>
+
+      <section>
+        <h2>오답지 매력도</h2>
+        <p class="muted">선택 과목의 모든 선택지 분포입니다.</p>
+        <div class="scroll"><table id="distTable"></table></div>
+      </section>
+
+      <section>
+        <h2>학생별 원점수</h2>
+        <div class="scroll"><table id="stuTable"></table></div>
+      </section>
+    </div>
   </div>
 </main>
 
@@ -95,15 +162,29 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script src="config.js"></script>
 <script>
-const SUBJECTS = ['국어', '영어', '수학', '사회', '과학', '한국사'];
+const SUBJECTS = ['국어', '수학', '영어', '한국사', '사회', '과학'];   // 표시 순서 고정
+const ORDER = s => { const i = SUBJECTS.indexOf(s); return i < 0 ? 99 : i; };
 const db = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
 const say = (el, t, kind) => { el.innerHTML = t ? `<div class="msg ${kind || 'err'}">${esc(t)}</div>` : ''; };
 const pct = v => v == null ? '' : (v * 100).toFixed(1) + '%';
 const num = v => v == null ? '' : (+v).toFixed(2);
+const pp = v => v == null ? '' : (v > 0 ? '+' : '') + (v * 100).toFixed(1) + 'p';
 
 let me = null, data = null;
+
+// ── 툴팁 ────────────────────────────────────────────
+const tip = $('tip');
+function hover(el, text) {
+  el.addEventListener('mousemove', e => {
+    tip.textContent = text;
+    tip.style.opacity = 1;
+    tip.style.left = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8) + 'px';
+    tip.style.top = (e.clientY - tip.offsetHeight - 10) + 'px';
+  });
+  el.addEventListener('mouseleave', () => tip.style.opacity = 0);
+}
 
 // ── 인증 ────────────────────────────────────────────
 $('loginForm').onsubmit = async e => {
@@ -147,14 +228,21 @@ $('load').onclick = async () => {
     ]);
     if (e3 || e4) throw new Error((e3 || e4).message);
 
+    const subs = [...new Set(items.map(i => i.subject))].sort((a, b) => ORDER(a) - ORDER(b));
     const dists = {};
-    for (const s of [...new Set(items.map(i => i.subject))]) {
-      const { data } = await db.rpc('exam_distractors', { p_exam: exam, p_subject: s });
-      dists[s] = data ?? [];
+    for (const s of subs) {
+      const { data: d } = await db.rpc('exam_distractors', { p_exam: exam, p_subject: s });
+      dists[s] = d ?? [];
     }
-    data = { exam, name: $('exam').selectedOptions[0].textContent, summary, items, scores, marks, dists };
+    data = {
+      exam, name: $('exam').selectedOptions[0].textContent, subs, dists,
+      summary: (summary ?? []).sort((a, b) => ORDER(a.subject) - ORDER(b.subject)),
+      items: items.sort((a, b) => ORDER(a.subject) - ORDER(b.subject) || a.q_no - b.q_no),
+      scores, marks,
+    };
     render();
-    say($('msg'), `${data.name} — 문항 ${items.length}개, 학생 ${new Set(scores.map(s => `${s.grade}-${s.class_no}-${s.student_no}`)).size}명`, 'ok');
+    $('dash').hidden = false;
+    say($('msg'), '', 'ok');
     $('xlsx').disabled = false;
   } catch (err) {
     say($('msg'), err.message);
@@ -162,58 +250,254 @@ $('load').onclick = async () => {
   $('load').disabled = false;
 };
 
-// ── 화면 ────────────────────────────────────────────
-function render() {
-  $('sumTable').innerHTML =
-    '<tr><th class="l">과목</th><th>우리 응시</th><th>우리 평균</th><th>우리 표준편차</th>' +
-    '<th>전체 응시</th><th>전체 평균</th><th>전체 표준편차</th><th>차이</th></tr>' +
-    data.summary.map(r => `<tr><td class="l">${esc(r.subject)}</td><td>${r.my_takers}</td><td>${num(r.my_mean)}</td>
-      <td>${num(r.my_sd)}</td><td>${r.all_takers}</td><td>${num(r.all_mean)}</td><td>${num(r.all_sd)}</td>
-      <td class="${r.gap < 0 ? 'weak' : ''}">${r.gap > 0 ? '+' : ''}${num(r.gap)}</td></tr>`).join('');
-  $('sumSec').hidden = false;
-
-  const subs = [...new Set(data.items.map(i => i.subject))];
-  $('subject').innerHTML = subs.map(s => `<option>${esc(s)}</option>`).join('');
-  $('subject').onchange = renderSubject;
-  renderSubject();
-  $('itemSec').hidden = $('distSec').hidden = false;
-
-  // 학생별 원점수 — 과목을 열로 펼친다
-  const by = {};
-  data.scores.forEach(s => {
-    const k = `${s.grade}-${s.class_no}-${s.student_no}`;
-    (by[k] ??= { k, g: s.grade, c: s.class_no, n: s.student_no })[s.subject] = s.raw_score;
-  });
-  $('stuTable').innerHTML =
-    '<tr><th class="l">학년</th><th class="l">반</th><th class="l">번호</th>' + subs.map(s => `<th>${esc(s)}</th>`).join('') + '</tr>' +
-    Object.values(by).map(r => `<tr><td class="l">${r.g}</td><td class="l">${r.c}</td><td class="l">${r.n}</td>` +
-      subs.map(s => `<td>${r[s] ?? ''}</td>`).join('') + '</tr>').join('');
-  $('stuSec').hidden = false;
+// ── SVG 기본 ────────────────────────────────────────
+const svgEl = (tag, attrs) => {
+  const e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+};
+// 데이터 끝만 둥근 세로 막대 (기준선 쪽은 각지게)
+function vbar(x, y, w, h, fill) {
+  const r = Math.min(4, w / 2, h);
+  const p = `M${x},${y + h} L${x},${y + r} Q${x},${y} ${x + r},${y} L${x + w - r},${y} Q${x + w},${y} ${x + w},${y + r} L${x + w},${y + h} Z`;
+  return svgEl('path', { d: p, fill, class: 'mark' });
 }
 
+// ── 화면 ────────────────────────────────────────────
+function render() {
+  renderTiles();
+  renderCompare();
+  renderPriority();
+  renderAttention();
+  $('subject').innerHTML = data.subs.map(s => `<option>${esc(s)}</option>`).join('');
+  $('subject').onchange = renderSubject;
+  renderSubject();
+  renderStudents();
+}
+
+function renderTiles() {
+  const nStu = new Set(data.scores.map(s => `${s.grade}-${s.class_no}-${s.student_no}`)).size;
+  const gaps = data.summary.filter(r => r.gap != null);
+  const worst = gaps.length ? gaps.reduce((a, b) => (+a.gap < +b.gap ? a : b)) : null;
+  const best = gaps.length ? gaps.reduce((a, b) => (+a.gap > +b.gap ? a : b)) : null;
+  const weak = data.items.filter(i => i.my_p_value != null && i.my_p_value - i.p_value <= -0.10).length;
+  const dull = data.items.filter(i => i.discrimination != null && i.discrimination < 0.2).length;
+  const allTakers = Math.max(...data.summary.map(r => r.all_takers ?? 0));
+
+  $('dashSub').textContent = `${data.name} · ${me.school_name} · 참여교 전체 ${allTakers}명 중 우리 학교 ${nStu}명`;
+  const tile = (k, v, s, color) =>
+    `<div class="tile"><div class="k">${esc(k)}</div><div class="v"${color ? ` style="color:${color}"` : ''}>${esc(v)}</div><div class="s">${esc(s)}</div></div>`;
+  $('tiles').innerHTML = [
+    tile('응시 학생', nStu + '명', `${data.subs.length}개 과목`),
+    worst ? tile('가장 약한 과목', worst.subject, `전체 평균 대비 ${num(worst.gap)}점`, worst.gap < 0 ? 'var(--critical)' : null) : '',
+    best ? tile('가장 강한 과목', best.subject, `전체 평균 대비 ${(+best.gap > 0 ? '+' : '') + num(best.gap)}점`, best.gap > 0 ? 'var(--good)' : null) : '',
+    tile('먼저 볼 문항', weak + '개', '전체보다 10%p 이상 낮음', weak ? 'var(--critical)' : null),
+    tile('변별력 낮은 문항', dull + '개', '변별도 0.2 미만'),
+  ].join('');
+}
+
+// 과목별 평균: 우리 학교 vs 전체 (2계열 묶은 막대)
+function renderCompare() {
+  const rows = data.summary;
+  const W = Math.max(560, rows.length * 130), H = 260, P = { t: 16, r: 12, b: 40, l: 44 };
+  const max = Math.max(...rows.flatMap(r => [+r.my_mean || 0, +r.all_mean || 0])) * 1.15 || 1;
+  const iw = W - P.l - P.r, ih = H - P.t - P.b;
+  const y = v => P.t + ih - (v / max) * ih;
+  const svg = svgEl('svg', { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: 'img' });
+
+  for (let i = 0; i <= 4; i++) {                       // 눈금은 뒤로 물린다
+    const v = max * i / 4, yy = y(v);
+    svg.append(svgEl('line', { x1: P.l, x2: W - P.r, y1: yy, y2: yy, class: 'grid' }));
+    const t = svgEl('text', { x: P.l - 8, y: yy + 4, 'text-anchor': 'end' });
+    t.textContent = v.toFixed(0); svg.append(t);
+  }
+  const band = iw / rows.length, bw = Math.min(26, band / 3.2);
+  rows.forEach((r, i) => {
+    const cx = P.l + band * (i + 0.5);
+    [['my_mean', 'var(--series-1)', '우리 학교'], ['all_mean', 'var(--series-2)', '전체']].forEach(([k, col, label], j) => {
+      const v = +r[k] || 0;
+      const x = cx - bw - 1 + j * (bw + 2);            // 막대 사이 2px 간격
+      const bar = vbar(x, y(v), bw, P.t + ih - y(v), col);
+      hover(bar, `${r.subject} · ${label}\n평균 ${num(r[k])}점 (${k === 'my_mean' ? r.my_takers : r.all_takers}명)`);
+      svg.append(bar);
+      const t = svgEl('text', { x: x + bw / 2, y: y(v) - 5, 'text-anchor': 'middle', class: 'val' });
+      t.textContent = num(r[k]); svg.append(t);        // 2계열뿐이므로 직접 라벨
+    });
+    const lab = svgEl('text', { x: cx, y: H - 20, 'text-anchor': 'middle' });
+    lab.textContent = r.subject; svg.append(lab);
+    const gap = svgEl('text', { x: cx, y: H - 6, 'text-anchor': 'middle' });
+    gap.textContent = (+r.gap > 0 ? '+' : '') + num(r.gap);
+    gap.setAttribute('fill', +r.gap < 0 ? 'var(--critical)' : 'var(--good)');
+    svg.append(gap);
+  });
+  svg.append(svgEl('line', { x1: P.l, x2: W - P.r, y1: P.t + ih, y2: P.t + ih, class: 'axis' }));
+  $('cmpChart').replaceChildren(svg);
+}
+
+function renderPriority() {
+  const rows = data.items
+    .filter(i => i.my_p_value != null && i.my_p_value - i.p_value <= -0.05)
+    .map(i => ({ ...i, gap: i.my_p_value - i.p_value }))
+    .sort((a, b) => a.gap - b.gap).slice(0, 15);
+  $('prioTable').innerHTML = rows.length
+    ? '<tr><th class="l">과목</th><th class="l">문항</th><th>배점</th><th>우리 정답률</th><th>전체 정답률</th><th>차이</th><th>변별도</th></tr>' +
+      rows.map(r => `<tr class="${r.gap <= -0.10 ? 'flag' : ''}"><td class="l">${esc(r.subject)}</td><td class="l">${r.q_no}번</td>
+        <td>${num(r.points)}</td><td class="weak">${pct(r.my_p_value)}</td><td>${pct(r.p_value)}</td>
+        <td class="weak">${pp(r.gap)}</td><td>${num(r.discrimination)}</td></tr>`).join('')
+    : '<tr><td class="l">전체보다 크게 낮은 문항이 없습니다.</td></tr>';
+}
+
+function renderAttention() {
+  const rows = [];
+  for (const s of data.subs)
+    for (const x of data.dists[s] ?? [])
+      if (!x.is_answer && x.choice !== '무응답' && x.rate_high != null && x.rate_high > x.rate_low)
+        rows.push({ subject: s, ...x, diff: x.rate_high - x.rate_low });
+  rows.sort((a, b) => b.diff - a.diff);
+  $('attnTable').innerHTML = rows.length
+    ? '<tr><th class="l">과목</th><th class="l">문항</th><th class="l">몰린 오답</th><th>상위 27%</th><th>하위 27%</th><th>상위−하위</th><th>전체 선택률</th></tr>' +
+      rows.slice(0, 15).map(r => `<tr><td class="l">${esc(r.subject)}</td><td class="l">${r.q_no}번</td>
+        <td class="l">${esc(r.choice)}번</td><td class="weak">${pct(r.rate_high)}</td><td>${pct(r.rate_low)}</td>
+        <td class="weak">${pp(r.diff)}</td><td>${pct(r.rate_all)}</td></tr>`).join('')
+    : '<tr><td class="l">상위권이 더 많이 고른 오답이 없습니다.</td></tr>';
+}
+
+// ── 과목별 상세 ─────────────────────────────────────
 function renderSubject() {
   const sub = $('subject').value;
   const rows = data.items.filter(i => i.subject === sub);
+  renderQmap(rows, sub);
+  renderClasses(sub);
+
   $('itemTable').innerHTML =
     '<tr><th class="l">문항</th><th class="l">유형</th><th>배점</th><th>전체 정답률</th><th>우리 정답률</th>' +
     '<th>차이</th><th>변별도</th><th>D지수</th><th>무응답률</th></tr>' +
     rows.map(r => {
-      const gap = (r.my_p_value ?? 0) - r.p_value;
-      const cls = r.my_p_value != null && gap <= -0.10 ? 'flag' : (gap >= 0.10 ? 'good' : '');
+      const gap = r.my_p_value == null ? null : r.my_p_value - r.p_value;
+      const cls = gap == null ? '' : (gap <= -0.10 ? 'flag' : gap >= 0.10 ? 'good-bg' : '');
       return `<tr class="${cls}"><td class="l">${r.q_no}</td><td class="l">${r.q_type === 'SA' ? '단답' : '객관'}</td>
         <td>${num(r.points)}</td><td>${pct(r.p_value)}</td><td>${pct(r.my_p_value)}</td>
-        <td>${r.my_p_value == null ? '' : (gap > 0 ? '+' : '') + (gap * 100).toFixed(1) + 'p'}</td>
-        <td>${num(r.discrimination)}</td><td>${num(r.d_index)}</td><td>${pct(r.blank_rate)}</td></tr>`;
+        <td>${pp(gap)}</td><td>${num(r.discrimination)}</td><td>${num(r.d_index)}</td><td>${pct(r.blank_rate)}</td></tr>`;
     }).join('');
 
-  // 상위 집단이 몰린 오답부터
-  const d = (data.dists[sub] ?? []).filter(x => !x.is_answer && x.choice !== '무응답' && x.rate_high != null);
-  d.sort((a, b) => b.rate_high - a.rate_high);
+  const d = (data.dists[sub] ?? []).slice().sort((a, b) => a.q_no - b.q_no || String(a.choice).localeCompare(String(b.choice)));
   $('distTable').innerHTML =
-    '<tr><th class="l">문항</th><th class="l">선택지</th><th>전체 선택률</th><th>상위 27%</th><th>하위 27%</th><th>상위−하위</th></tr>' +
-    d.slice(0, 40).map(x => `<tr><td class="l">${x.q_no}</td><td class="l">${esc(x.choice)}</td>
-      <td>${pct(x.rate_all)}</td><td class="${x.rate_high > x.rate_low ? 'weak' : ''}">${pct(x.rate_high)}</td>
-      <td>${pct(x.rate_low)}</td><td>${((x.rate_high - x.rate_low) * 100).toFixed(1)}p</td></tr>`).join('');
+    '<tr><th class="l">문항</th><th class="l">선택지</th><th class="l">정답</th><th>전체 선택률</th><th>상위 27%</th><th>하위 27%</th><th>상위−하위</th></tr>' +
+    d.map(x => `<tr><td class="l">${x.q_no}</td><td class="l">${esc(x.choice)}</td><td class="l">${x.is_answer ? '●' : ''}</td>
+      <td>${pct(x.rate_all)}</td><td class="${!x.is_answer && x.rate_high > x.rate_low ? 'weak' : ''}">${pct(x.rate_high)}</td>
+      <td>${pct(x.rate_low)}</td><td>${x.rate_high == null ? '' : pp(x.rate_high - x.rate_low)}</td></tr>`).join('');
+}
+
+// 문항 품질 맵: 가로 정답률, 세로 변별도
+function renderQmap(rows, sub) {
+  const W = 900, H = 320, P = { t: 16, r: 16, b: 38, l: 46 };
+  const iw = W - P.l - P.r, ih = H - P.t - P.b;
+  const ds = rows.map(r => +r.discrimination).filter(v => !isNaN(v));
+  const dMin = Math.min(0, ...ds), dMax = Math.max(0.6, ...ds);
+  const x = v => P.l + v * iw;
+  const y = v => P.t + ih - ((v - dMin) / (dMax - dMin)) * ih;
+  const svg = svgEl('svg', { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: 'img' });
+
+  for (let i = 0; i <= 5; i++) {
+    const xx = x(i / 5);
+    svg.append(svgEl('line', { x1: xx, x2: xx, y1: P.t, y2: P.t + ih, class: 'grid' }));
+    const t = svgEl('text', { x: xx, y: H - 20, 'text-anchor': 'middle' });
+    t.textContent = (i * 20) + '%'; svg.append(t);
+  }
+  [dMin, (dMin + dMax) / 2, dMax].forEach(v => {
+    const yy = y(v);
+    svg.append(svgEl('line', { x1: P.l, x2: W - P.r, y1: yy, y2: yy, class: 'grid' }));
+    const t = svgEl('text', { x: P.l - 8, y: yy + 4, 'text-anchor': 'end' });
+    t.textContent = v.toFixed(1); svg.append(t);
+  });
+  // 변별도 0.2 기준선
+  if (dMin < 0.2 && dMax > 0.2) {
+    svg.append(svgEl('line', { x1: P.l, x2: W - P.r, y1: y(0.2), y2: y(0.2),
+      stroke: 'var(--ink-2)', 'stroke-width': 1, 'stroke-dasharray': '4 4' }));
+    const t = svgEl('text', { x: W - P.r, y: y(0.2) - 5, 'text-anchor': 'end' });
+    t.textContent = '변별도 0.2'; svg.append(t);
+  }
+
+  rows.forEach(r => {
+    if (r.discrimination == null) return;
+    const gap = r.my_p_value == null ? 0 : r.my_p_value - r.p_value;
+    const weak = gap <= -0.10;
+    const c = svgEl('circle', {
+      cx: x(+r.p_value), cy: y(+r.discrimination), r: weak ? 7 : 5,
+      fill: weak ? 'var(--critical)' : 'var(--series-1)',
+      stroke: 'var(--surface)', 'stroke-width': 2, class: 'mark',   // 겹칠 때 2px 링
+    });
+    hover(c, `${sub} ${r.q_no}번 (${r.q_type === 'SA' ? '단답' : '객관'} ${num(r.points)}점)\n` +
+      `전체 정답률 ${pct(r.p_value)} · 우리 ${pct(r.my_p_value)} (${pp(gap)})\n변별도 ${num(r.discrimination)} · 무응답 ${pct(r.blank_rate)}`);
+    svg.append(c);
+    if (weak) {   // 붉은 점만 직접 라벨
+      const t = svgEl('text', { x: x(+r.p_value), y: y(+r.discrimination) - 11, 'text-anchor': 'middle', class: 'val' });
+      t.textContent = r.q_no; svg.append(t);
+    }
+  });
+  svg.append(svgEl('line', { x1: P.l, x2: W - P.r, y1: P.t + ih, y2: P.t + ih, class: 'axis' }));
+  const xl = svgEl('text', { x: P.l + iw / 2, y: H - 4, 'text-anchor': 'middle' });
+  xl.textContent = '전체 정답률 →'; svg.append(xl);
+  $('qmap').replaceChildren(svg);
+}
+
+function renderClasses(sub) {
+  const by = {};
+  data.scores.filter(s => s.subject === sub).forEach(s => {
+    (by[s.class_no] ??= []).push(+s.raw_score);
+  });
+  const rows = Object.entries(by).map(([c, v]) =>
+    ({ c: +c, n: v.length, mean: v.reduce((a, b) => a + b, 0) / v.length })).sort((a, b) => a.c - b.c);
+  if (!rows.length) return $('classChart').replaceChildren();
+
+  const all = data.summary.find(r => r.subject === sub)?.all_mean;
+  const W = Math.max(420, rows.length * 76), H = 200, P = { t: 16, r: 12, b: 36, l: 44 };
+  const iw = W - P.l - P.r, ih = H - P.t - P.b;
+  const max = Math.max(...rows.map(r => r.mean), +all || 0) * 1.15 || 1;
+  const y = v => P.t + ih - (v / max) * ih;
+  const svg = svgEl('svg', { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: 'img' });
+
+  for (let i = 0; i <= 4; i++) {
+    const v = max * i / 4, yy = y(v);
+    svg.append(svgEl('line', { x1: P.l, x2: W - P.r, y1: yy, y2: yy, class: 'grid' }));
+    const t = svgEl('text', { x: P.l - 8, y: yy + 4, 'text-anchor': 'end' });
+    t.textContent = v.toFixed(0); svg.append(t);
+  }
+  const band = iw / rows.length, bw = Math.min(34, band - 10);
+  rows.forEach((r, i) => {
+    const x = P.l + band * i + (band - bw) / 2;
+    const bar = vbar(x, y(r.mean), bw, P.t + ih - y(r.mean), 'var(--series-1)');
+    hover(bar, `${r.c}반 · ${r.n}명\n평균 ${r.mean.toFixed(2)}점`);
+    svg.append(bar);
+    const t = svgEl('text', { x: x + bw / 2, y: y(r.mean) - 5, 'text-anchor': 'middle', class: 'val' });
+    t.textContent = r.mean.toFixed(1); svg.append(t);
+    const lab = svgEl('text', { x: x + bw / 2, y: H - 18, 'text-anchor': 'middle' });
+    lab.textContent = r.c + '반'; svg.append(lab);
+  });
+  if (all != null) {   // 전체 평균 기준선
+    svg.append(svgEl('line', { x1: P.l, x2: W - P.r, y1: y(+all), y2: y(+all),
+      stroke: 'var(--series-2)', 'stroke-width': 2, 'stroke-dasharray': '5 4' }));
+    const t = svgEl('text', { x: W - P.r, y: y(+all) - 5, 'text-anchor': 'end' });
+    t.textContent = `전체 평균 ${num(all)}`; t.setAttribute('fill', 'var(--series-2)'); svg.append(t);
+  }
+  svg.append(svgEl('line', { x1: P.l, x2: W - P.r, y1: P.t + ih, y2: P.t + ih, class: 'axis' }));
+  $('classChart').replaceChildren(svg);
+}
+
+function renderStudents() {
+  const by = {};
+  data.scores.forEach(s => {
+    const k = `${s.grade}-${s.class_no}-${s.student_no}`;
+    (by[k] ??= { g: s.grade, c: s.class_no, n: s.student_no })[s.subject] = s.raw_score;
+  });
+  $('stuTable').innerHTML =
+    '<tr><th class="l">학년</th><th class="l">반</th><th class="l">번호</th>' +
+    data.subs.map(s => `<th>${esc(s)}</th>`).join('') + '<th>합계</th></tr>' +
+    Object.values(by).map(r => {
+      const tot = data.subs.reduce((a, s) => a + (+r[s] || 0), 0);
+      return `<tr><td class="l">${r.g}</td><td class="l">${r.c}</td><td class="l">${r.n}</td>` +
+        data.subs.map(s => `<td>${r[s] ?? ''}</td>`).join('') + `<td>${tot}</td></tr>`;
+    }).join('');
 }
 
 // ── 엑셀 저장 ───────────────────────────────────────
@@ -230,7 +514,6 @@ $('xlsx').onclick = async () => {
   const RED = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFDE7E7' } };
   const GREEN = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F5EC' } };
 
-  // 1. 요약
   const s1 = wb.addWorksheet('과목별 요약');
   head(s1, [
     { header: '과목', key: 'subject', width: 10 }, { header: '우리 응시', key: 'my_takers', width: 10 },
@@ -240,7 +523,6 @@ $('xlsx').onclick = async () => {
   ]);
   data.summary.forEach(r => { const row = s1.addRow(r); if (r.gap < 0) row.getCell('gap').fill = RED; });
 
-  // 2. 문항분석
   const s2 = wb.addWorksheet('문항분석');
   head(s2, [
     { header: '과목', key: 'subject', width: 10 }, { header: '문항', key: 'q_no', width: 6 },
@@ -258,7 +540,6 @@ $('xlsx').onclick = async () => {
     if (r.discrimination != null && r.discrimination < 0.2) row.getCell('discrimination').fill = RED;
   });
 
-  // 3. 오답지 매력도
   const s3 = wb.addWorksheet('오답지 매력도');
   head(s3, [
     { header: '과목', key: 'subject', width: 10 }, { header: '문항', key: 'q_no', width: 6 },
@@ -266,26 +547,23 @@ $('xlsx').onclick = async () => {
     { header: '전체 선택률', key: 'rate_all', width: 11 }, { header: '상위 27%', key: 'rate_high', width: 10 },
     { header: '하위 27%', key: 'rate_low', width: 10 }, { header: '상위−하위', key: 'diff', width: 10 },
   ]);
-  Object.entries(data.dists).forEach(([subject, arr]) => arr.forEach(x => {
+  data.subs.forEach(subject => (data.dists[subject] ?? []).forEach(x => {
     const row = s3.addRow({ ...x, subject, is_answer: x.is_answer ? 'O' : '',
       diff: x.rate_high == null ? null : x.rate_high - x.rate_low });
     ['rate_all', 'rate_high', 'rate_low', 'diff'].forEach(k => row.getCell(k).numFmt = '0.0%');
-    if (!x.is_answer && x.rate_high > x.rate_low) row.getCell('rate_high').fill = RED;  // 상위가 더 많이 고른 오답
+    if (!x.is_answer && x.rate_high > x.rate_low) row.getCell('rate_high').fill = RED;
   }));
 
-  // 4. 학생별 원점수
-  const subs = [...new Set(data.items.map(i => i.subject))];
   const s4 = wb.addWorksheet('학생별 원점수');
   head(s4, [{ header: '학년', key: 'g', width: 6 }, { header: '반', key: 'c', width: 6 }, { header: '번호', key: 'n', width: 6 },
-    ...subs.map(s => ({ header: s, key: s, width: 9 }))]);
+    ...data.subs.map(s => ({ header: s, key: s, width: 9 })), { header: '합계', key: 'tot', width: 9 }]);
   const by = {};
   data.scores.forEach(s => {
     const k = `${s.grade}-${s.class_no}-${s.student_no}`;
     (by[k] ??= { g: s.grade, c: s.class_no, n: s.student_no })[s.subject] = s.raw_score;
   });
-  Object.values(by).forEach(r => s4.addRow(r));
+  Object.values(by).forEach(r => s4.addRow({ ...r, tot: data.subs.reduce((a, s) => a + (+r[s] || 0), 0) }));
 
-  // 5. 학생별 정오표 — 과목마다 문항 수가 다르므로 한 시트에 과목 열을 둔다
   const maxQ = Math.max(...data.items.map(i => i.q_no));
   const s5 = wb.addWorksheet('학생별 정오표');
   head(s5, [{ header: '과목', key: 'subject', width: 10 }, { header: '학년', key: 'g', width: 6 },
@@ -296,10 +574,12 @@ $('xlsx').onclick = async () => {
     const k = `${m.subject}|${m.grade}-${m.class_no}-${m.student_no}`;
     (grid[k] ??= { subject: m.subject, g: m.grade, c: m.class_no, n: m.student_no })['q' + m.q_no] = m.is_correct ? 'O' : 'X';
   });
-  Object.values(grid).forEach(r => {
-    const row = s5.addRow(r);
-    for (let q = 1; q <= maxQ; q++) if (row.getCell('q' + q).value === 'X') row.getCell('q' + q).fill = RED;
-  });
+  Object.values(grid)
+    .sort((a, b) => ORDER(a.subject) - ORDER(b.subject) || a.c - b.c || a.n - b.n)
+    .forEach(r => {
+      const row = s5.addRow(r);
+      for (let q = 1; q <= maxQ; q++) if (row.getCell('q' + q).value === 'X') row.getCell('q' + q).fill = RED;
+    });
 
   const buf = await wb.xlsx.writeBuffer();
   const a = document.createElement('a');
