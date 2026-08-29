@@ -79,14 +79,17 @@ for (let r = d.firstRow; r < sheet.length; r++) {
   const line = sheet[r], subject = String(line[d.subject] ?? '').trim();
   if (!SUBJ.includes(subject)) continue;
   for (let q = 1; q <= NQ[subject]; q++) {
-    const raw = String(line[d.firstQ + q - 1] ?? '').trim();
-    if (!raw) continue;
-    const okay = SA[subject]?.has(q) ? /^\d+$/.test(raw) : /^[1-5]$/.test(raw);
-    if (!okay) abnormal.push({ subject, q, raw, ox: String(line[OX_COL + q - 1] ?? '').trim() });
+    const cell = String(line[d.firstQ + q - 1] ?? '');
+    if (!cell.trim()) continue;
+    const marked = cell.replace(/^\s+/, '');   // collect.html이 저장하는 형태
+    const okay = SA[subject]?.has(q) ? /^\d+$/.test(marked) : /^[1-5]$/.test(cell.trim());
+    if (!okay) abnormal.push({ subject, q, raw: cell, ox: String(line[OX_COL + q - 1] ?? '').trim() });
   }
 }
-assert.strictEqual(abnormal.length, 23, `비정상 마킹은 23건이어야 함 (실제 ${abnormal.length})`);
-assert(!abnormal.some(a => a.subject === '수학' && a.raw.length > 1 && /^\d+$/.test(a.raw)),
+assert.strictEqual(abnormal.length, 29, `비정상 마킹은 29건이어야 함 (실제 ${abnormal.length})`);
+// 뒤 공백('26 ', '1  ')은 단답형 마지막 자리 미마킹 — trim하면 정답으로 오채점될 수 있다
+assert.strictEqual(abnormal.filter(a => /\s$/.test(a.raw)).length, 6, '뒤 공백 케이스 6건');
+assert(!abnormal.some(a => a.subject === '수학' && /^\s*\d+$/.test(a.raw) && a.raw.trim().length > 1),
   '정상적인 단답형 값이 오탐됨: ' + JSON.stringify(abnormal.filter(a => a.subject === '수학')));
 // 리딩 업체도 이 값들을 전부 오답 처리했다 — 우리 방침과 일치하는지 확인
 assert(abnormal.every(a => a.ox === 'X'), '리딩 업체가 정답 처리한 비정상 마킹이 있음');

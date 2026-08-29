@@ -77,10 +77,14 @@
 
     <section>
       <h2>정답·배점표 업로드</h2>
-      <p class="muted">헤더: exam_code, subject, q_no, answer, points, q_type, unit —
+      <div class="row">
+        <label>회차 <select id="keyExam"></select></label>
+      </div>
+      <p class="muted">리딩 업체의 <b>정답일람표</b>(.xls/.xlsx)를 그대로 올리거나,
+        직접 만든 CSV(exam_code, subject, q_no, answer, points, q_type, unit)를 올리세요.
         같은 (회차·과목)을 다시 올리면 통째로 교체됩니다(정답 정정용).</p>
-      <div id="drop">CSV 파일을 여기에 끌어다 놓거나 클릭해서 선택</div>
-      <input type="file" id="file" accept=".csv" hidden>
+      <div id="drop">정답표 파일을 여기에 끌어다 놓거나 클릭해서 선택</div>
+      <input type="file" id="file" accept=".xls,.xlsx,.csv" hidden>
       <div id="keyMsg"></div>
     </section>
 
@@ -100,6 +104,7 @@
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script src="config.js"></script>
 <script>
@@ -154,6 +159,7 @@ async function loadExams() {
     (data ?? []).map(x => `<tr><td>${esc(x.exam_code)}</td><td>${esc(x.exam_name)}</td><td>${esc(x.exam_date)}</td>
       <td>${esc(x.grade)}</td><td><button class="ghost" data-code="${esc(x.exam_code)}" data-to="${!x.is_open}">
       ${x.is_open ? '개방됨 → 닫기' : '수집중 → 개방'}</button></td></tr>`).join('');
+  $('keyExam').innerHTML = (data ?? []).map(x => `<option value="${esc(x.exam_code)}">${esc(x.exam_name)}</option>`).join('');
   $('examTable').querySelectorAll('[data-code]').forEach(b => b.onclick = async () => {
     const to = b.dataset.to === 'true';
     if (to && !confirm('개방하면 새 제출이 막히고 정답·리포트가 열립니다. 모든 학교가 제출했나요?')) return;
@@ -202,17 +208,63 @@ function validate(rows) {
   return { errors, groups };
 }
 
+// 리딩 업체 정답일람표 파서.
+// 과목 블록마다 "[객관식 정답/배점]"과 (수학만) "[주관식 정답/배점]"이 있고,
+// 주관식 번호는 1부터 다시 시작하므로 객관식 문항수를 더해 실제 문항번호로 바꾼다.
+function parseSheet(sheet, exam_code) {
+  const txt = r => String(r?.[0] ?? '').replace(/\s/g, '');
+  const out = [];
+  let subject = null, mcCount = 0, mode = null;
+
+  for (const r of sheet) {
+    const head = txt(r);
+    const found = SUBJECTS.find(s => head.startsWith(s) && head.includes('정답일람표'));
+    if (found) { subject = found; mcCount = 0; mode = null; continue; }
+    if (!subject) continue;
+
+    const m = head.match(/^객관식문항수:(\d+)$/);
+    if (m) { mcCount = +m[1]; continue; }
+    if (/^\[객관식정답/.test(head)) { mode = 'MC'; continue; }
+    if (/^\[주관식정답/.test(head)) { mode = 'SA'; continue; }
+    if (!mode) continue;
+
+    const no = +String(r[0]).trim(), points = +String(r[2]).trim();
+    if (!Number.isInteger(no) || no < 1 || !(points > 0)) continue;   // '번호' 헤더 등
+    const answer = String(r[1] ?? '').trim().split(/[,/|\s]+/).filter(Boolean).join('|');
+    if (!answer) continue;
+    out.push({
+      exam_code, subject, q_no: mode === 'SA' ? mcCount + no : no,
+      answer, points, q_type: mode, unit: null,
+    });
+  }
+  return out;
+}
+
 async function upload(file) {
   say($('keyMsg'), '');
-  const text = (await file.text()).replace(/^﻿/, '');
-  const { data: rows } = Papa.parse(text, { header: true, skipEmptyLines: true });
+  const exam_code = $('keyExam').value;
+  if (!exam_code) return say($('keyMsg'), '회차를 먼저 선택하세요.');
+
+  let rows;
+  if (/\.xlsx?$/i.test(file.name)) {
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', raw: false });
+    const sheet = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '', blankrows: false });
+    rows = parseSheet(sheet, exam_code);
+    if (!rows.length) return say($('keyMsg'), '정답일람표를 인식하지 못했습니다. 시트 첫 열에 "○○ 정답일람표"가 있는지 확인하세요.');
+  } else {
+    const text = (await file.text()).replace(/^﻿/, '');
+    rows = Papa.parse(text, { header: true, skipEmptyLines: true }).data;
+  }
   if (!rows.length) return say($('keyMsg'), '빈 파일입니다.');
 
   const { errors, groups } = validate(rows);
   if (errors.length) return say($('keyMsg'), `${errors.length}건의 오류로 중단했습니다.\n\n` + errors.slice(0, 20).join('\n'));
 
-  const summary = Object.entries(groups).map(([k, v]) => `${k} ${v.length}문항`).join(' / ');
-  if (!confirm(`다음을 적용합니다. 같은 회차·과목의 기존 정답표는 삭제됩니다.\n\n${summary}`)) return;
+  const pts = {};
+  rows.forEach(r => { const k = `${r.exam_code}/${r.subject}`; pts[k] = (pts[k] ?? 0) + +r.points; });
+  const summary = Object.entries(groups)
+    .map(([k, v]) => `${k.split('/')[1]} — ${v.length}문항, 배점 합계 ${pts[k]}점`).join('\n');
+  if (!confirm(`문항 수와 배점 합계가 정답표와 맞는지 확인하세요.\n같은 회차·과목의 기존 정답표는 삭제됩니다.\n\n${summary}`)) return;
 
   for (const key of Object.keys(groups)) {
     const [exam_code, subject] = key.split('/');
