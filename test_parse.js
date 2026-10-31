@@ -1,10 +1,11 @@
 // collect.html의 열 자동 인식 self-check.  실행: node test_parse.js [파일경로]
 // 실물 OMR 파일이 없으면 합성 시트로 돌린다.
-const assert = require('assert');
-const fs = require('fs'), path = require('path');
-const XLSX = require('xlsx');
+import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
+import XLSX from 'xlsx';
 
-const src = fs.readFileSync(path.join(__dirname, 'collect.html'), 'utf8');
+const src = fs.readFileSync(path.join(import.meta.dirname, 'public/index.html'), 'utf8');
 const norm = s => String(s ?? '').replace(/\s/g, '');
 const body = src.match(/function detect\(\) \{[\s\S]*?\n\}/);
 assert(body, 'collect.html에서 detect()를 찾지 못했습니다');

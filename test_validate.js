@@ -1,14 +1,17 @@
 // 정답표 검증 로직 self-check.  실행: node test_validate.js
 // admin.html에서 validate()를 그대로 꺼내 돌린다 (복사본을 두면 원본과 갈라진다).
-const assert = require('assert');
-const src = require('fs').readFileSync(require('path').join(__dirname, 'admin.html'), 'utf8');
+import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
+import XLSX from 'xlsx';
+const src = fs.readFileSync(path.join(import.meta.dirname, 'public/index.html'), 'utf8');
 
 const SUBJECTS = ['국어', '영어', '수학', '사회', '과학', '한국사'];
 const body = src.match(/function validate\(rows\) \{[\s\S]*?\n\}/);
 assert(body, 'admin.html에서 validate()를 찾지 못했습니다');
 const validate = new Function('SUBJECTS', body[0] + '\nreturn validate;')(SUBJECTS);
 
-const row = (o = {}) => ({ exam_code: '2026-09', subject: '국어', q_no: 1, answer: '3', points: 2, q_type: 'MC', ...o });
+const row = (o = {}) => ({ exam_code: '2026-09', grade: 2, subject: '국어', q_no: 1, answer: '3', points: 2, q_type: 'MC', ...o });
 const errs = rows => validate(rows).errors;
 const has = (rows, needle) => errs(rows).some(e => e.includes(needle));
 
@@ -28,6 +31,7 @@ assert(has([row({ q_type: 'X' })], 'q_type'));
 assert(has([row({ answer: '' })], '정답이 비어 있음'));
 assert(has([row({ q_type: 'SA', answer: '가나다' })], '단답형 정답은 숫자'));
 assert(has([row({ answer: '6' })], '객관식 정답은 1~5'));
+assert(has([row({ grade: 4 })], '학년은 1~3'));
 assert(has([row({ q_no: 1 }), row({ q_no: 1 })], '중복'));
 assert(has([row({ q_no: 1 }), row({ q_no: 3 })], '빠짐'));
 
@@ -36,13 +40,14 @@ assert.deepStrictEqual(errs([row({ q_no: 1 }), row({ q_no: 1, subject: '영어' 
 
 // 회차가 다르면 역시 분리
 assert.deepStrictEqual(errs([row({ q_no: 1 }), row({ q_no: 1, exam_code: '2026-06' })]), []);
+// 학년이 다르면 역시 분리
+assert.deepStrictEqual(errs([row({ q_no: 1 }), row({ q_no: 1, grade: 1 })]), []);
 
-console.log('validate() 통과 — 13개 케이스');
+console.log('validate() 통과 — 15개 케이스');
 
 // ── 정답일람표(.xls) 파서 ────────────────────────────
 // 실행: node test_validate.js [정답표경로]
-const path = require('path'), fs = require('fs');
-const pBody = src.match(/function parseSheet\(sheet, exam_code\) \{[\s\S]*?\n\}/);
+const pBody = src.match(/function parseSheet\(sheet, exam_code, grade\) \{[\s\S]*?\n\}/);
 assert(pBody, 'admin.html에서 parseSheet()를 찾지 못했습니다');
 const parseSheet = new Function('SUBJECTS', pBody[0] + '\nreturn parseSheet;')(SUBJECTS);
 
@@ -51,17 +56,16 @@ const synth = parseSheet([
   ['수학 정답일람표 [08]'], ['객관식 문항수 : 2'], ['[ 객관식 정답/배점 ]'], ['번호', '정답', '배점'],
   [1, 4, 2], [2, 3, 2],
   ['[ 주관식 정답/배점 ]'], ['번호', '정답', '배점'], [1, 47, 4],
-], '2026-03');
+], '2026-03', 2);
 assert.deepStrictEqual(synth, [
-  { exam_code: '2026-03', subject: '수학', q_no: 1, answer: '4', points: 2, q_type: 'MC', unit: null },
-  { exam_code: '2026-03', subject: '수학', q_no: 2, answer: '3', points: 2, q_type: 'MC', unit: null },
-  { exam_code: '2026-03', subject: '수학', q_no: 3, answer: '47', points: 4, q_type: 'SA', unit: null },
+  { exam_code: '2026-03', grade: 2, subject: '수학', q_no: 1, answer: '4', points: 2, q_type: 'MC', unit: null },
+  { exam_code: '2026-03', grade: 2, subject: '수학', q_no: 2, answer: '3', points: 2, q_type: 'MC', unit: null },
+  { exam_code: '2026-03', grade: 2, subject: '수학', q_no: 3, answer: '47', points: 4, q_type: 'SA', unit: null },
 ], '주관식 번호는 객관식 문항수만큼 밀려야 한다');
 
 const keyFile = process.argv[2] || 'D:/자료/USB 드라이브/업무/0. 오창고/성적/모의고사/3월/2학년 정답.xls';
 if (!fs.existsSync(keyFile)) { console.log('실물 정답표 없음 — 건너뜀:', keyFile); process.exit(0); }
 
-const XLSX = require('xlsx');
 const wb = XLSX.read(fs.readFileSync(keyFile), { type: 'buffer', raw: false });
 const keys = parseSheet(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '', blankrows: false }), '2026-03');
 

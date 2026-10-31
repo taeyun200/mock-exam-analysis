@@ -5,4 +5,6 @@
 # 키
 *key*.txt
 .env*
+.dev.vars
 node_modules/
+.wrangler/

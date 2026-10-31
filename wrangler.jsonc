@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mock-exam",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-07-15",
+  "assets": { "directory": "./public", "binding": "ASSETS" },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "mock-exam", "database_id": "84fa3deb-63b0-4757-abca-46b2b6e4411a" }
+  ],
+  // 로그인 시도 제한: IP당 1분에 10회
+  "ratelimits": [
+    { "name": "LOGIN_LIMIT", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }
+  ]
+  // 비밀: SESSION_SECRET (세션 쿠키 서명키). 배포본은 `wrangler secret put SESSION_SECRET`, 로컬은 .dev.vars
+}

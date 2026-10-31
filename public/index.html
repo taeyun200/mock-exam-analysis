@@ -1,0 +1,1146 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>모의고사 분석</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    color-scheme: light;
+    --navy: #1f3a5f; --navy2: #2c527f; --bg: #e9edf2; --card: #fff; --ink: #1c2530; --muted: #6b7686;
+    --line: #e2e6ec; --accent: #2c7be5; --danger: #d64545; --ok: #2f9e6b; --warn: #d98c1f; --purple: #6b58d6;
+    --shadow: 0 1px 3px rgba(20,30,45,.07), 0 6px 18px rgba(20,30,45,.05);
+    --glass-bg: rgba(255,255,255,.52); --glass-line: rgba(31,58,95,.09);
+    --surface: var(--card); --grid: #eceef1; --ink-2: var(--muted);
+    --series-1: #2a78d6; --series-2: #eb6834; --critical: #d03b3b; --good: #0ca30c;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: linear-gradient(160deg, #e2e9f7 0%, #eef1f8 45%, #f2e9f6 100%); color: var(--ink);
+    font: 14px/1.6 "Pretendard", "Malgun Gothic", system-ui, -apple-system, sans-serif; display: flex; flex-direction: column; }
+  [hidden] { display: none !important; }
+
+  /* 상단바 */
+  .topbar { display: flex; align-items: center; justify-content: space-between; background: var(--navy); color: #fff;
+    padding: 11px 20px; position: sticky; top: 0; z-index: 30; gap: 8px; flex: none; }
+  .tb-left { display: flex; align-items: center; gap: 12px; }
+  .tb-left strong { font-size: 17px; }
+  .tb-menu { display: none; background: rgba(255,255,255,.14); color: #fff; border: 1px solid rgba(255,255,255,.3);
+    border-radius: 8px; width: 32px; height: 32px; font-size: 16px; line-height: 1; align-items: center; justify-content: center; }
+  .tb-right { display: flex; align-items: center; gap: 8px; }
+  .user { color: #dbe6f5; font-size: 13px; }
+  .role { font-size: 11px; background: rgba(255,255,255,.14); color: #dbe6f5; padding: 3px 9px; border-radius: 999px; border: 1px solid rgba(255,255,255,.25); }
+  .btn-ghost { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.4); border-radius: 9px; padding: 0 13px; height: 32px; font: inherit; font-size: 13px; cursor: pointer; }
+  .btn-ghost:hover { background: rgba(255,255,255,.12); }
+
+  /* 사이드바 + 본문 */
+  .app-shell { flex: 1; min-height: 0; display: flex; overflow: hidden; }
+  #sidebar { width: 232px; flex: none; background: var(--glass-bg); backdrop-filter: blur(22px) saturate(160%);
+    border-right: 1px solid var(--glass-line); display: flex; flex-direction: column; padding: 16px 12px; overflow-y: auto; }
+  .sb-sec-label { font-size: 10.5px; color: var(--muted); font-weight: 700; letter-spacing: .03em; padding: 14px 8px 6px; }
+  .sb-sec-label:first-child { padding-top: 2px; }
+  .sb-nav { display: flex; flex-direction: column; gap: 2px; }
+  .sbnav { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 9px; border: none; background: none;
+    color: var(--muted); cursor: pointer; font: inherit; font-size: 13px; text-align: left; }
+  .sbnav:hover { background: rgba(31,58,95,.06); }
+  .sbnav.on { background: rgba(107,88,214,.16); color: var(--purple); font-weight: 700; }
+  .sb-foot { margin-top: auto; padding: 12px 8px 0; font-size: 11.5px; color: var(--muted); }
+  .sb-backdrop { display: none; }
+  #main-col { flex: 1; min-width: 0; overflow-y: auto; padding: 22px 24px 80px; }
+  #main-col > .inner { width: 100%; }   /* 오창고 대시보드처럼 본문이 창 너비를 다 쓴다 */
+
+  /* 카드(=기존 section) */
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin-bottom: 14px; }
+  section section { box-shadow: none; }
+  h1 { font-size: 19px; margin: 0 0 4px; }
+  h2 { font-size: 15.5px; margin: 0 0 6px; }
+  h2 + .muted { margin: 0 0 12px; }
+  .view > h1 + .muted { margin-bottom: 14px; }
+  input, select, button { font: inherit; padding: 7px 10px; border: 1px solid #c3c9d0; border-radius: 8px; background: #fff; color: var(--ink); }
+  button { background: var(--navy); color: #fff; border-color: var(--navy); cursor: pointer; }
+  button:hover:not(:disabled) { background: var(--navy2); }
+  button:disabled { background: #c3c9d0; border-color: #c3c9d0; cursor: not-allowed; }
+  button.ghost { background: #fff; color: var(--ink); border-color: var(--line); }
+  button.ghost:hover:not(:disabled) { background: #f4f6f9; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  table { border-collapse: collapse; font-size: 13px; width: 100%; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: var(--card); }
+  .num th, .num td { text-align: right; }
+  .num th:first-child, .num td:first-child, .num th.l, .num td.l { text-align: left; }
+  .scroll { overflow-x: auto; max-height: 640px; overflow-y: auto; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .msg { padding: 10px 12px; border-radius: 8px; margin: 10px 0; white-space: pre-wrap; }
+  .msg.err  { background: #fdecec; color: #8c1c1c; }
+  .msg.warn { background: #fff6e5; color: #7a4a00; }
+  .msg.ok   { background: #e8f5ec; color: #14532d; }
+  #kDrop, #cDrop { border: 2px dashed #c3c9d0; border-radius: 10px; padding: 30px; text-align: center; color: var(--muted); cursor: pointer; }
+  #kDrop.over, #cDrop.over { border-color: var(--navy); background: #f0f1f3; }
+  .receipt { font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+
+  /* 리포트 */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  .tile { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .tile .k { font-size: 12px; color: var(--muted); }
+  .tile .v { font-size: 26px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.25; }
+  .tile .s { font-size: 12px; color: var(--muted); }
+  .legend { display: flex; gap: 16px; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  .legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 5px; vertical-align: -1px; }
+  svg { display: block; max-width: 100%; }
+  svg text { fill: var(--muted); font-size: 11px; }
+  svg text.val { fill: var(--ink); font-size: 11px; }
+  svg .axis { stroke: var(--line); stroke-width: 1; }
+  svg .grid { stroke: var(--grid); stroke-width: 1; }
+  svg .mark:hover { stroke: var(--ink); stroke-width: 2; }
+  #tip { position: fixed; pointer-events: none; background: var(--ink); color: #fff; font-size: 12px;
+         padding: 6px 9px; border-radius: 5px; opacity: 0; transition: opacity .1s; z-index: 10; white-space: pre; }
+  .flag { background: #fdecec; }
+  .good-bg { background: #e8f5ec; }
+  .weak { color: var(--critical); font-weight: 600; }
+
+  /* 로그인 게이트 */
+  .gate { position: fixed; inset: 0; z-index: 100; background: var(--bg); display: flex; align-items: center; justify-content: center; }
+  .gate-card { width: min(380px, 92vw); background: #fff; border-radius: 16px; box-shadow: var(--shadow); padding: 32px 26px 26px; }
+  .gate-card h1 { text-align: center; }
+  .gate-card .muted { text-align: center; margin-bottom: 14px; }
+  .gate-card input { width: 100%; margin-top: 10px; padding: 10px 12px; }
+  .gate-card button { width: 100%; margin-top: 16px; height: 42px; font-size: 14px; }
+
+  @media (max-width: 760px) {
+    .tb-menu { display: inline-flex; }
+    #sidebar { position: fixed; top: 0; left: 0; height: 100%; width: min(260px, 80vw); z-index: 55; transform: translateX(-100%); transition: transform .18s; background: #fff; }
+    body.sb-open #sidebar { transform: none; }
+    body.sb-open .sb-backdrop { display: block; position: fixed; inset: 0; background: rgba(20,30,45,.42); z-index: 54; }
+    #main-col { padding: 14px 12px 60px; }
+    .user { display: none; }
+  }
+</style>
+</head>
+<body>
+<div id="tip"></div>
+
+<div class="gate" id="gate" hidden>
+  <form class="gate-card" id="loginForm">
+    <h1>모의고사 분석</h1>
+    <p class="muted">학교 ID로 로그인하세요</p>
+    <input id="lid" placeholder="ID" required autocomplete="username">
+    <input type="password" id="pw" placeholder="비밀번호" required autocomplete="current-password">
+    <div id="loginMsg"></div>
+    <button>로그인</button>
+  </form>
+</div>
+
+<div class="topbar">
+  <div class="tb-left">
+    <button class="tb-menu" id="btnMenu" aria-label="메뉴">&#9776;</button>
+    <strong>모의고사 분석</strong>
+  </div>
+  <div class="tb-right">
+    <span class="user" id="who"></span>
+    <span class="role" id="roleBadge"></span>
+    <button class="btn-ghost" id="logout">로그아웃</button>
+  </div>
+</div>
+
+<div class="app-shell">
+  <div class="sb-backdrop" id="sbBackdrop"></div>
+  <aside id="sidebar"></aside>
+  <main id="main-col"><div class="inner" id="app">
+
+  <section class="view" id="v-submit" hidden style="background:none;border:none;box-shadow:none;padding:0">
+    <h1>OMR 제출</h1>
+    <p class="muted">OMR 리딩 결과 파일을 그대로 올리시면 됩니다. 여러 학년이 한 파일에 있어도 학년 열로 자동 분할됩니다. 학생 이름은 저장하지 않습니다.</p>
+    <section>
+      <h2>1. 회차 선택</h2>
+      <div class="row"><select id="cExam"></select></div>
+      <div id="examMsg"></div>
+    </section>
+
+    <section>
+      <h2>2. 파일 올리기</h2>
+      <div id="cDrop">OMR 리딩 결과 파일(.xlsx / .xls / .csv)을 끌어다 놓거나 클릭해서 선택</div>
+      <input type="file" id="cFile" accept=".xlsx,.xls,.csv" hidden>
+    </section>
+
+    <div id="mapSec" hidden>
+      <section>
+        <h2>3. 열 확인</h2>
+        <p class="muted">자동으로 찾은 결과입니다. 다르면 바꿔주세요.</p>
+        <div class="row">
+          <label>학년 <select id="mGrade"></select></label>
+          <label>반 <select id="mClass"></select></label>
+          <label>번호 <select id="mNo"></select></label>
+          <label>과목 <select id="mSubject"></select></label>
+          <label>첫 문항 <select id="mFirstQ"></select></label>
+          <label>데이터 시작행 <select id="mFirstRow"></select></label>
+        </div>
+        <div class="scroll"><table id="preview"></table></div>
+      </section>
+
+      <section>
+        <h2>4. 검증</h2>
+        <div id="checkMsg"></div>
+        <div class="scroll"><table id="summary"></table></div>
+      </section>
+
+      <section>
+        <h2>5. 제출</h2>
+        <div id="dupMsg"></div>
+        <button id="submit" disabled>제출</button>
+        <div id="subMsg"></div>
+      </section>
+    </div>
+  </section>
+
+  <section class="view" id="v-report" hidden style="background:none;border:none;box-shadow:none;padding:0">
+    <h1>분석 리포트</h1>
+    <p class="muted">학생은 학년·반·번호로만 표시됩니다. 이름은 수집하지 않습니다.</p>
+    <section>
+      <div class="row" style="margin:0">
+        <select id="rExam"></select>
+        <select id="rGrade"></select>
+        <button id="load">불러오기</button>
+        <button class="ghost" id="xlsx" disabled>엑셀로 저장</button>
+      </div>
+      <div id="rMsg"></div>
+    </section>
+
+    <div id="dash" hidden>
+      <section>
+        <h2>한눈에 보기</h2>
+        <p class="muted" id="dashSub"></p>
+        <div class="tiles" id="tiles"></div>
+      </section>
+
+      <section>
+        <h2>과목별 평균</h2>
+        <p class="muted">우리 학교와 참여교 전체의 원점수 평균입니다.</p>
+        <div class="legend">
+          <span><i style="background:var(--series-1)"></i>우리 학교</span>
+          <span><i style="background:var(--series-2)"></i>전체</span>
+        </div>
+        <div class="scroll" style="max-height:none"><div id="cmpChart"></div></div>
+      </section>
+
+      <section>
+        <h2>먼저 볼 문항</h2>
+        <p class="muted">우리 학교 정답률이 전체보다 크게 낮은 문항입니다. 수업에서 먼저 다룰 순서로 정렬했습니다.</p>
+        <div class="scroll"><table class="num" id="prioTable"></table></div>
+      </section>
+
+      <section>
+        <h2>상위권이 몰린 오답</h2>
+        <p class="muted">상위 27% 학생이 하위 27%보다 더 많이 고른 오답입니다. 개념 오해나 출제 문제를 드러내는 가장 값진 신호입니다.</p>
+        <div class="scroll"><table class="num" id="attnTable"></table></div>
+      </section>
+
+      <section>
+        <h2>과목별 상세</h2>
+        <div class="row"><select id="subject"></select></div>
+
+        <h2 style="margin-top:18px">문항 품질 맵</h2>
+        <p class="muted">가로는 전체 정답률, 세로는 변별도입니다. 아래쪽(변별도 0.2 미만)은 잘 가르는 문항이 아니고,
+          붉은 점은 우리 학교가 전체보다 10%p 이상 낮은 문항입니다.</p>
+        <div id="qmap"></div>
+
+        <h2 style="margin-top:18px">반별 평균</h2>
+        <div id="classChart"></div>
+
+        <h2 style="margin-top:18px">문항별 수치</h2>
+        <div class="scroll"><table class="num" id="itemTable"></table></div>
+      </section>
+
+      <section>
+        <h2>오답지 매력도</h2>
+        <p class="muted">선택 과목의 모든 선택지 분포입니다.</p>
+        <div class="scroll"><table class="num" id="distTable"></table></div>
+      </section>
+
+      <section>
+        <h2>학생별 원점수</h2>
+        <div class="scroll"><table class="num" id="stuTable"></table></div>
+      </section>
+    </div>
+  </section>
+
+  <section class="view card" id="v-schools" hidden>
+      <h2>학교</h2>
+      <form class="row" id="schoolForm">
+        <input id="sCode" placeholder="학교코드" required size="12">
+        <input id="sName" placeholder="학교명" required>
+        <input id="sDist" placeholder="시·군" size="10">
+        <button>추가</button>
+      </form>
+      <table id="schoolTable"></table>
+  </section>
+
+  <section class="view card" id="v-exams" hidden>
+      <h2>회차</h2>
+      <form class="row" id="examForm">
+        <input id="eCode" placeholder="2026-09" required size="10">
+        <input id="eName" placeholder="회차 이름" required>
+        <input id="eDate" type="date">
+        <button>추가</button>
+      </form>
+      <p class="muted">개방 = 정답표·리포트 열람 허용. 개방하면 새 제출이 막힙니다.</p>
+      <table id="examTable"></table>
+  </section>
+
+  <section class="view card" id="v-keys" hidden>
+      <h2>정답·배점표 업로드</h2>
+      <div class="row">
+        <label>회차 <select id="keyExam"></select></label>
+        <label>학년 <select id="keyGrade"><option value="1">1학년</option><option value="2" selected>2학년</option><option value="3">3학년</option></select></label>
+      </div>
+      <p class="muted">리딩 업체의 <b>정답일람표</b>(.xls/.xlsx)를 그대로 올리거나,
+        직접 만든 CSV(exam_code, grade, subject, q_no, answer, points, q_type, unit)를 올리세요.
+        같은 (회차·학년·과목)을 다시 올리면 통째로 교체됩니다(정답 정정용).</p>
+      <div id="kDrop">정답표 파일을 여기에 끌어다 놓거나 클릭해서 선택</div>
+      <input type="file" id="kFile" accept=".xls,.xlsx,.csv" hidden>
+      <div id="keyMsg"></div>
+  </section>
+
+  <section class="view card" id="v-accounts" hidden>
+      <h2>학교 계정</h2>
+      <p class="muted">학교마다 ID 하나를 만들어 알려 주세요. 그 ID로 학교의 모든 학년을 올리고 리포트를 봅니다.
+        비밀번호를 바꾸려면 같은 ID에 새 비밀번호를 넣어 저장하세요. 비워 두면 학교·권한만 바뀝니다.</p>
+      <form class="row" id="acctForm">
+        <input id="aId" placeholder="ID (영문·숫자)" required pattern="[A-Za-z0-9_-]{2,30}" size="14">
+        <input id="aPw" placeholder="비밀번호 (6자 이상)" size="16" autocomplete="off">
+        <select id="aSchool"></select>
+        <select id="aRole"><option value="school">학교</option><option value="admin">운영자</option></select>
+        <button>저장</button>
+      </form>
+      <div id="acctMsg"></div>
+      <table id="acctTable"></table>
+  </section>
+
+  </div></main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script>
+// ── 공통 ────────────────────────────────────────────
+const SUBJECTS = ['국어', '수학', '영어', '한국사', '사회', '과학'];   // 표시 순서 고정
+const ORDER = s => { const i = SUBJECTS.indexOf(s); return i < 0 ? 99 : i; };
+const api = async (path, body, method) => {
+  const r = await fetch(path, { method: method ?? (body ? 'POST' : 'GET'),
+    headers: body ? { 'content-type': 'application/json' } : {}, body: body && JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(j.error ?? r.statusText), { status: r.status });
+  return j;
+};
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+// kind: 'ok' | 'warn' | 'err'(기본). true 는 'ok' 와 같다.
+const say = (el, text, kind) => { el.innerHTML = text ? `<div class="msg ${kind === true ? 'ok' : kind || 'err'}">${esc(text)}</div>` : ''; };
+const norm = s => String(s ?? '').replace(/\s/g, '');
+const pct = v => v == null ? '' : (v * 100).toFixed(1) + '%';
+const num = v => v == null ? '' : (+v).toFixed(2);
+const pp = v => v == null ? '' : (v > 0 ? '+' : '') + (v * 100).toFixed(1) + 'p';
+
+let me = null, data = null;
+
+// ── 인증 ────────────────────────────────────────────
+$('loginForm').onsubmit = async e => {
+  e.preventDefault();
+  try { await api('/api/login', { login_id: $('lid').value.trim(), password: $('pw').value }); location.reload(); }
+  catch (err) { say($('loginMsg'), err.message); }
+};
+$('logout').onclick = async () => { await api('/api/logout', {}); location.reload(); };
+
+// ── 사이드바 · 뷰 전환 ──────────────────────────────
+// 운영자는 관리 메뉴가 더 보인다. 학교가 배정된 운영자는 제출·리포트도 쓸 수 있다.
+const NAV = [
+  { sec: '수집·분석', items: [['submit', '📤 OMR 제출'], ['report', '📊 분석 리포트']], need: m => !!m.school_code },
+  { sec: '관리', items: [['schools', '🏫 학교'], ['exams', '📅 회차'], ['keys', '✅ 정답표'], ['accounts', '🔑 학교 계정']], need: m => m.role === 'admin' },
+];
+function buildSidebar() {
+  const secs = NAV.filter(n => n.need(me));
+  $('sidebar').innerHTML = secs.map(n => `<div class="sb-sec-label">${n.sec}</div><div class="sb-nav">` +
+    n.items.map(([v, label]) => `<button class="sbnav" data-view="${v}">${label}</button>`).join('') + '</div>').join('') +
+    `<div class="sb-foot">${esc(me.school_name ?? '')}</div>`;
+  $('sidebar').querySelectorAll('[data-view]').forEach(b => b.onclick = () => { location.hash = b.dataset.view; document.body.classList.remove('sb-open'); });
+  return secs.flatMap(n => n.items.map(i => i[0]));
+}
+function route(views) {
+  const v = views.includes(location.hash.slice(1)) ? location.hash.slice(1) : views[0];
+  document.querySelectorAll('.view').forEach(el => el.hidden = el.id !== 'v-' + v);
+  document.querySelectorAll('.sbnav').forEach(b => b.classList.toggle('on', b.dataset.view === v));
+}
+$('btnMenu').onclick = () => document.body.classList.toggle('sb-open');
+$('sbBackdrop').onclick = () => document.body.classList.remove('sb-open');
+
+(async () => {
+  try { me = await api('/api/me'); } catch (e) { $('gate').hidden = false; if (e.status !== 401) say($('loginMsg'), e.message); return; }
+  $('who').textContent = me.school_name ? `${me.school_name} · ${me.login_id}` : me.login_id;
+  $('roleBadge').textContent = me.role === 'admin' ? '운영자' : '학교';
+  const views = buildSidebar();
+  if (!views.length) return say($('loginMsg'), '학교가 배정되지 않은 계정입니다. 운영자에게 문의하세요.'), $('gate').hidden = false;
+  onhashchange = () => route(views); route(views);
+  if (me.school_code) { loadSubmitExams(); loadReportExams(); }
+  if (me.role === 'admin') loadAll();
+})();
+
+// ════════════════════════════════════════════════════
+// 관리 (운영자)
+// ════════════════════════════════════════════════════
+async function loadAll() { await Promise.all([loadSchools(), loadExams(), loadAccounts()]); }
+
+// ── 학교 ────────────────────────────────────────────
+async function loadSchools() {
+  const data = await api('/api/schools');
+  $('schoolTable').innerHTML = '<tr><th>코드</th><th>학교명</th><th>시·군</th></tr>' +
+    (data ?? []).map(s => `<tr><td>${esc(s.school_code)}</td><td>${esc(s.school_name)}</td><td>${esc(s.district)}</td></tr>`).join('');
+  $('aSchool').innerHTML = '<option value="">(학교 없음)</option>' +
+    (data ?? []).map(s => `<option value="${esc(s.school_code)}">${esc(s.school_name)}</option>`).join('');
+}
+$('schoolForm').onsubmit = async e => {
+  e.preventDefault();
+  try {
+    await api('/api/schools', { school_code: $('sCode').value.trim(), school_name: $('sName').value.trim(), district: $('sDist').value.trim() || null });
+  } catch (err) { return alert(err.message); }
+  e.target.reset(); loadSchools();
+};
+
+// ── 회차 ────────────────────────────────────────────
+async function loadExams() {
+  const data = await api('/api/exams');
+  $('examTable').innerHTML = '<tr><th>코드</th><th>이름</th><th>일자</th><th>상태</th></tr>' +
+    (data ?? []).map(x => `<tr><td>${esc(x.exam_code)}</td><td>${esc(x.exam_name)}</td><td>${esc(x.exam_date)}</td>
+      <td><button class="ghost" data-code="${esc(x.exam_code)}" data-to="${!x.is_open}">
+      ${x.is_open ? '개방됨 → 닫기' : '수집중 → 개방'}</button></td></tr>`).join('');
+  $('keyExam').innerHTML = (data ?? []).map(x => `<option value="${esc(x.exam_code)}">${esc(x.exam_name)}</option>`).join('');
+  $('examTable').querySelectorAll('[data-code]').forEach(b => b.onclick = async () => {
+    const to = b.dataset.to === 'true';
+    if (to && !confirm('개방하면 새 제출이 막히고 정답·리포트가 열립니다. 모든 학교가 제출했나요?')) return;
+    try { await api('/api/exams/' + encodeURIComponent(b.dataset.code), { is_open: to }, 'PATCH'); loadExams(); }
+    catch (err) { alert(err.message); }
+  });
+}
+$('examForm').onsubmit = async e => {
+  e.preventDefault();
+  try {
+    await api('/api/exams', { exam_code: $('eCode').value.trim(), exam_name: $('eName').value.trim(),
+      exam_date: $('eDate').value || null });
+  } catch (err) { return alert(err.message); }
+  e.target.reset(); loadExams();
+};
+
+// ── 정답표 ──────────────────────────────────────────
+function validate(rows) {
+  const need = ['exam_code', 'grade', 'subject', 'q_no', 'answer', 'points', 'q_type'];
+  const missing = need.filter(c => !(c in (rows[0] ?? {})));
+  if (missing.length) return { errors: ['헤더 누락: ' + missing.join(', ')], groups: {} };
+
+  const errors = [], groups = {};
+  rows.forEach((r, i) => {
+    const at = `${i + 2}행`;
+    if (![1, 2, 3].includes(+r.grade)) errors.push(`${at}: 학년은 1~3이어야 함 '${r.grade}'`);
+    if (!SUBJECTS.includes(r.subject)) errors.push(`${at}: 알 수 없는 과목 '${r.subject}'`);
+    if (!Number.isInteger(+r.q_no) || +r.q_no < 1) errors.push(`${at}: 문항번호가 잘못됨 '${r.q_no}'`);
+    if (!(+r.points > 0)) errors.push(`${at}: 배점이 잘못됨 '${r.points}'`);
+    if (!['MC', 'SA'].includes(r.q_type)) errors.push(`${at}: q_type은 MC 또는 SA ('${r.q_type}')`);
+    const ans = String(r.answer ?? '').trim();
+    if (!ans) errors.push(`${at}: 정답이 비어 있음`);
+    if (r.q_type === 'SA' && ans !== '*' && !/^\d+(\|\d+)*$/.test(ans))
+      errors.push(`${at}: 단답형 정답은 숫자여야 함 '${ans}'`);
+    if (r.q_type === 'MC' && ans !== '*' && !/^[1-5](\|[1-5])*$/.test(ans))
+      errors.push(`${at}: 객관식 정답은 1~5여야 함 '${ans}'`);
+    (groups[`${r.exam_code}/${r.grade}/${r.subject}`] ??= []).push(+r.q_no);
+  });
+
+  for (const [key, nos] of Object.entries(groups)) {
+    const dup = [...new Set(nos.filter((n, i) => nos.indexOf(n) !== i))];
+    if (dup.length) errors.push(`${key}: 문항번호 중복 ${dup.join(', ')}`);
+    const max = Math.max(...nos);
+    const gaps = Array.from({ length: max }, (_, i) => i + 1).filter(n => !nos.includes(n));
+    if (gaps.length) errors.push(`${key}: 문항번호 빠짐 ${gaps.join(', ')} (1~${max} 중)`);
+  }
+  return { errors, groups };
+}
+
+// 리딩 업체 정답일람표 파서.
+// 과목 블록마다 "[객관식 정답/배점]"과 (수학만) "[주관식 정답/배점]"이 있고,
+// 주관식 번호는 1부터 다시 시작하므로 객관식 문항수를 더해 실제 문항번호로 바꾼다.
+function parseSheet(sheet, exam_code, grade) {
+  const txt = r => String(r?.[0] ?? '').replace(/\s/g, '');
+  const out = [];
+  let subject = null, mcCount = 0, mode = null;
+
+  for (const r of sheet) {
+    const head = txt(r);
+    const found = SUBJECTS.find(s => head.startsWith(s) && head.includes('정답일람표'));
+    if (found) { subject = found; mcCount = 0; mode = null; continue; }
+    if (!subject) continue;
+
+    const m = head.match(/^객관식문항수:(\d+)$/);
+    if (m) { mcCount = +m[1]; continue; }
+    if (/^\[객관식정답/.test(head)) { mode = 'MC'; continue; }
+    if (/^\[주관식정답/.test(head)) { mode = 'SA'; continue; }
+    if (!mode) continue;
+
+    const no = +String(r[0]).trim(), points = +String(r[2]).trim();
+    if (!Number.isInteger(no) || no < 1 || !(points > 0)) continue;   // '번호' 헤더 등
+    const answer = String(r[1] ?? '').trim().split(/[,/|\s]+/).filter(Boolean).join('|');
+    if (!answer) continue;
+    out.push({
+      exam_code, grade, subject, q_no: mode === 'SA' ? mcCount + no : no,
+      answer, points, q_type: mode, unit: null,
+    });
+  }
+  return out;
+}
+
+async function upload(file) {
+  say($('keyMsg'), '');
+  const exam_code = $('keyExam').value, grade = +$('keyGrade').value;
+  if (!exam_code) return say($('keyMsg'), '회차를 먼저 선택하세요.');
+
+  let rows;
+  if (/\.xlsx?$/i.test(file.name)) {
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', raw: false });
+    const sheet = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '', blankrows: false });
+    rows = parseSheet(sheet, exam_code, grade);
+    if (!rows.length) return say($('keyMsg'), '정답일람표를 인식하지 못했습니다. 시트 첫 열에 "○○ 정답일람표"가 있는지 확인하세요.');
+  } else {
+    const text = (await file.text()).replace(/^﻿/, '');
+    rows = Papa.parse(text, { header: true, skipEmptyLines: true }).data.map(r => ({ grade, ...r }));   // CSV에 grade 열이 있으면 그것이 우선
+  }
+  if (!rows.length) return say($('keyMsg'), '빈 파일입니다.');
+
+  const { errors, groups } = validate(rows);
+  if (errors.length) return say($('keyMsg'), `${errors.length}건의 오류로 중단했습니다.\n\n` + errors.slice(0, 20).join('\n'));
+
+  const pts = {};
+  rows.forEach(r => { const k = `${r.exam_code}/${r.grade}/${r.subject}`; pts[k] = (pts[k] ?? 0) + +r.points; });
+  const summary = Object.entries(groups)
+    .map(([k, v]) => `${k.split('/')[1]}학년 ${k.split('/')[2]} — ${v.length}문항, 배점 합계 ${pts[k]}점`).join('\n');
+  if (!confirm(`문항 수와 배점 합계가 정답표와 맞는지 확인하세요.\n같은 회차·학년·과목의 기존 정답표는 삭제됩니다.\n\n${summary}`)) return;
+
+  const payload = rows.map(r => ({
+    exam_code: r.exam_code, grade: +r.grade, subject: r.subject, q_no: +r.q_no,
+    answer: String(r.answer).trim(), points: +r.points, q_type: r.q_type, unit: r.unit || null
+  }));
+  try { await api('/api/answer-keys', { rows: payload }, 'PUT'); say($('keyMsg'), `${payload.length}문항 등록 완료 — ${summary}`, true); }
+  catch (err) { say($('keyMsg'), err.message); }
+}
+
+$('kDrop').onclick = () => $('kFile').click();
+$('kFile').onchange = e => e.target.files[0] && upload(e.target.files[0]);
+$('kDrop').ondragover = e => { e.preventDefault(); $('kDrop').classList.add('over'); };
+$('kDrop').ondragleave = () => $('kDrop').classList.remove('over');
+$('kDrop').ondrop = e => { e.preventDefault(); $('kDrop').classList.remove('over'); upload(e.dataTransfer.files[0]); };
+
+// ── 학교 계정 ───────────────────────────────────────
+async function loadAccounts() {
+  const data = await api('/api/accounts');
+  $('acctTable').innerHTML = '<tr><th>ID</th><th>학교</th><th>권한</th><th></th></tr>' +
+    data.map(a => `<tr><td>${esc(a.login_id)}</td><td>${esc(a.school_code)}</td><td>${a.role === 'admin' ? '운영자' : '학교'}</td>
+      <td><button class="ghost" data-id="${esc(a.login_id)}">삭제</button></td></tr>`).join('');
+  $('acctTable').querySelectorAll('[data-id]').forEach(b => b.onclick = async () => {
+    if (!confirm(`'${b.dataset.id}' 계정을 지울까요? 제출된 자료는 남습니다.`)) return;
+    try { await api('/api/accounts/' + encodeURIComponent(b.dataset.id), null, 'DELETE'); loadAccounts(); }
+    catch (err) { alert(err.message); }
+  });
+}
+$('acctForm').onsubmit = async e => {
+  e.preventDefault();
+  try {
+    await api('/api/accounts', { login_id: $('aId').value.trim(), password: $('aPw').value || null,
+      school_code: $('aSchool').value || null, role: $('aRole').value });
+    say($('acctMsg'), '저장 완료', true); e.target.reset(); loadAccounts();
+  } catch (err) { say($('acctMsg'), err.message); }
+};
+
+// ════════════════════════════════════════════════════
+// OMR 제출 (학교)
+// ════════════════════════════════════════════════════
+let sheet = [];        // 2차원 배열 (원본)
+let parsed = null;     // 검증을 통과한 적재용 데이터
+
+
+async function loadSubmitExams() {
+  const data = await api('/api/exams?open=0');
+  $('cExam').innerHTML = (data ?? []).map(x => `<option value="${esc(x.exam_code)}">${esc(x.exam_name)}</option>`).join('');
+  if (!data?.length) say($('examMsg'), '지금 제출 가능한 회차가 없습니다. 운영자에게 문의하세요.');
+}
+$('cExam').onchange = () => { if (sheet.length) remap(); };
+
+// ── 파일 읽기 ───────────────────────────────────────
+async function read(file) {
+  const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', raw: false });
+  sheet = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '', blankrows: false });
+  if (sheet.length < 3) return say($('checkMsg'), '내용이 거의 없는 파일입니다.');
+  buildMapUI();
+  remap();
+}
+$('cDrop').onclick = () => $('cFile').click();
+$('cFile').onchange = e => e.target.files[0] && read(e.target.files[0]);
+$('cDrop').ondragover = e => { e.preventDefault(); $('cDrop').classList.add('over'); };
+$('cDrop').ondragleave = () => $('cDrop').classList.remove('over');
+$('cDrop').ondrop = e => { e.preventDefault(); $('cDrop').classList.remove('over'); read(e.dataTransfer.files[0]); };
+
+// ── 열 자동 인식 ────────────────────────────────────
+function detect() {
+  const width = Math.max(...sheet.slice(0, 5).map(r => r.length));
+  const hdr = sheet.findIndex(r => r.some(c => norm(c) === '과목'));
+  const find = names => {
+    if (hdr < 0) return -1;
+    return sheet[hdr].findIndex(c => names.includes(norm(c)));
+  };
+  const grade = find(['학년']), cls = find(['반']), no = find(['번호']), subject = find(['과목']);
+  // '문항별 표기' 같은 그룹 헤더가 있으면 그 열, 없으면 과목 열 다음
+  let firstQ = hdr < 0 ? -1 : sheet[hdr].findIndex(c => /문항별.*(표기|응답|마킹)/.test(norm(c)));
+  if (firstQ < 0) firstQ = Math.max(grade, cls, no, subject) + 1;
+  // 헤더 다음 행이 전부 숫자면 그것도 헤더(문항번호 행)
+  let firstRow = hdr + 1;
+  while (firstRow < sheet.length && sheet[firstRow].slice(firstQ, firstQ + 5).every(c => /^\d+$/.test(String(c).trim()))
+         && !String(sheet[firstRow][subject] ?? '').trim()) firstRow++;
+  return { width, hdr, grade, cls, no, subject, firstQ, firstRow };
+}
+
+function buildMapUI() {
+  const d = detect();
+  const label = i => `${XLSX.utils.encode_col(i)} — ${String(sheet[d.hdr]?.[i] ?? '').replace(/\s+/g, ' ').trim() || '(빈 제목)'}`;
+  const opts = (sel, val) => {
+    sel.innerHTML = Array.from({ length: d.width }, (_, i) => `<option value="${i}">${esc(label(i))}</option>`).join('');
+    sel.value = Math.max(0, val);
+  };
+  opts($('mGrade'), d.grade); opts($('mClass'), d.cls); opts($('mNo'), d.no);
+  opts($('mSubject'), d.subject); opts($('mFirstQ'), d.firstQ);
+  $('mFirstRow').innerHTML = sheet.map((_, i) => `<option value="${i}">${i + 1}행</option>`).join('');
+  $('mFirstRow').value = d.firstRow;
+  ['mGrade', 'mClass', 'mNo', 'mSubject', 'mFirstQ', 'mFirstRow'].forEach(id => $(id).onchange = remap);
+  $('mapSec').hidden = false;
+}
+
+// ── 파싱 + 검증 ─────────────────────────────────────
+async function remap() {
+  const m = {
+    grade: +$('mGrade').value, cls: +$('mClass').value, no: +$('mNo').value,
+    subject: +$('mSubject').value, firstQ: +$('mFirstQ').value, firstRow: +$('mFirstRow').value,
+  };
+  showPreview(m);
+
+  const exam = $('cExam').value;
+  if (!exam) return fail('회차를 먼저 선택하세요.');
+  let counts;
+  try { counts = await api('/api/item-counts?exam=' + encodeURIComponent(exam)); }
+  catch (err) { return fail('문항 수 조회 실패: ' + err.message); }
+  if (!counts?.length) return fail('이 회차의 정답표가 아직 등록되지 않았습니다. 운영자에게 문의하세요.');
+  // 학년마다 시험지가 다르므로 (학년|과목) 단위로 정답표를 맞춘다. 파일의 학년 열로 자동 분할된다.
+  const gk = (g, s) => `${g}|${s}`;
+  const need = Object.fromEntries(counts.map(c => [gk(c.grade, c.subject), c.n_items]));
+  // 단답형은 '15', '047'처럼 여러 자리가 정상이므로 복수 마킹 판정에서 제외한다.
+  const sa = Object.fromEntries(counts.map(c => [gk(c.grade, c.subject), new Set(c.sa_items ?? [])]));
+
+  const errors = [], warns = [], rows = [], seen = new Set(), stat = {};
+  for (let r = m.firstRow; r < sheet.length; r++) {
+    const line = sheet[r];
+    const subject = String(line[m.subject] ?? '').trim();
+    if (!subject && !String(line[m.no] ?? '').trim()) continue;   // 빈 행
+    const at = `${r + 1}행`;
+
+    if (!SUBJECTS.includes(subject)) { errors.push(`${at}: 알 수 없는 과목 '${subject}'`); continue; }
+    const g = +String(line[m.grade] ?? '').trim(), c = +String(line[m.cls] ?? '').trim(), n = +String(line[m.no] ?? '').trim();
+    if (![g, c, n].every(Number.isInteger)) { errors.push(`${at}: 학년/반/번호를 읽을 수 없음 (${line[m.grade]}, ${line[m.cls]}, ${line[m.no]})`); continue; }
+    const k = gk(g, subject);
+    if (!(k in need)) { errors.push(`${at}: ${g}학년 ${subject} 정답표가 등록되지 않았습니다`); continue; }
+
+    const key = `${subject}-${g}-${c}-${n}`;
+    if (seen.has(key)) { errors.push(`${at}: 학번 중복 — ${subject} ${g}학년 ${c}반 ${n}번`); continue; }
+    seen.add(key);
+
+    const s = stat[k] ??= { students: 0, blank: 0, cells: 0, absent: 0, multi: [] };
+    s.students++;
+    let blanks = 0;
+    for (let q = 1; q <= need[k]; q++) {
+      const cell = String(line[m.firstQ + q - 1] ?? '');
+      const raw = cell.trim();
+      s.cells++;
+      if (!raw) { blanks++; s.blank++; continue; }
+      // 단답형은 3칸 우측 정렬(' 15', '  4', '100')이 정상. 뒤에 공백이 남으면
+      // 마지막 자리를 안 칠한 미완성 답('26 ')이므로 무효다 — 앞 공백만 지워 저장하면
+      // 채점 규칙(^[0-9]+$)이 그대로 오답 처리한다. 여기서 trim하면 정답으로 오채점된다.
+      const marked = cell.replace(/^\s+/, '');
+      // 그 밖의 비정상: 복수 마킹('45', '*2'), 자리 누락('1 3'). 원본대로 저장해 오답이 되게 둔다.
+      const okay = sa[k].has(q) ? /^\d+$/.test(marked) : /^[1-5]$/.test(raw);
+      if (!okay) s.multi.push(`${g}학년 ${c}반 ${n}번 ${subject} ${q}번: '${cell}'`);
+      rows.push({ grade: g, class_no: c, student_no: n, q_no: q, marked, _s: subject });
+    }
+    if (blanks === need[k]) s.absent++;
+  }
+
+  const grades = [...new Set(Object.keys(stat).map(k => k.split('|')[0]))].sort();
+  for (const [k, n] of Object.entries(need)) {   // 파일에 있는 학년만 과목 누락을 경고한다
+    const [g, subject] = k.split('|');
+    if (grades.includes(g) && !stat[k]) warns.push(`${g}학년 ${subject}: 파일에 응답이 없습니다 (정답표는 ${n}문항)`);
+  }
+  const abnormal = Object.values(stat).flatMap(s => s.multi);
+  if (abnormal.length) warns.push(
+    `비정상 마킹 ${abnormal.length}건 — 복수 마킹이거나 자리가 비었습니다. 오답으로 채점됩니다.\n` +
+    `OMR 원본과 대조해 리딩 오류라면 다시 읽혀 주세요.\n  ` +
+    abnormal.slice(0, 10).join('\n  ') + (abnormal.length > 10 ? `\n  … 외 ${abnormal.length - 10}건` : ''));
+
+  renderSummary(stat, need);
+  if (errors.length) return fail(`${errors.length}건의 오류로 제출할 수 없습니다.\n\n` + errors.slice(0, 20).join('\n'));
+
+  parsed = { exam, rows, stat };
+  const w = warns.length ? warns.join('\n\n') + '\n\n' : '';
+  say($('checkMsg'), w + `검증 통과 — ${grades.map(g => g + '학년').join('·')}, ${Object.keys(stat).length}개 학년·과목, ${rows.length.toLocaleString()}개 응답`, warns.length ? 'warn' : 'ok');
+  await checkExisting();
+}
+
+function fail(msg) { parsed = null; $('submit').disabled = true; say($('checkMsg'), msg); }
+
+function showPreview(m) {
+  const head = sheet[Math.max(0, m.firstRow - 1)] ?? [];
+  const cols = [m.grade, m.cls, m.no, m.subject, ...Array.from({ length: 8 }, (_, i) => m.firstQ + i)];
+  const cell = (r, i) => `<td>${esc(String(r?.[i] ?? '').trim())}</td>`;
+  $('preview').innerHTML =
+    '<tr><th>학년</th><th>반</th><th>번호</th><th>과목</th>' +
+    Array.from({ length: 8 }, (_, i) => `<th>${esc(String(head[m.firstQ + i] ?? (i + 1)))}</th>`).join('') + '<th>…</th></tr>' +
+    sheet.slice(m.firstRow, m.firstRow + 8).map(r => '<tr>' + cols.map(i => cell(r, i)).join('') + '<td>…</td></tr>').join('');
+}
+
+function renderSummary(stat, need) {
+  $('summary').innerHTML = '<tr><th>학년</th><th>과목</th><th>정답표 문항</th><th>응시</th><th>결시(전 문항 무응답)</th><th>무응답률</th></tr>' +
+    Object.entries(stat).map(([k, v]) => `<tr><td>${k.split('|')[0]}</td><td>${esc(k.split('|')[1])}</td><td>${need[k]}</td><td>${v.students}</td>
+      <td>${v.absent}</td><td>${(v.blank / v.cells * 100).toFixed(1)}%</td></tr>`).join('');
+}
+
+// ── 기존 제출 확인 ──────────────────────────────────
+async function checkExisting() {
+  const data = await api('/api/submissions?exam=' + encodeURIComponent(parsed.exam));
+  parsed.replacing = data ?? [];
+  if (data?.length) {
+    const when = new Date(data[0].submitted_at).toLocaleString('ko-KR');
+    say($('dupMsg'), `이미 제출된 건이 있습니다 (${when}, ${data.map(d => `${d.grade}학년 ${d.subject}`).join('·')}).\n제출하면 이전 건을 대체합니다. 이전 데이터는 삭제되지 않고 보관됩니다.`, 'warn');
+  } else say($('dupMsg'), '');
+  $('submit').disabled = false;
+}
+
+// ── 제출 ────────────────────────────────────────────
+$('submit').onclick = async () => {
+  if (!parsed) return;
+  if (parsed.replacing.length && !confirm('이전 제출을 대체합니다. 계속할까요?')) return;
+  $('submit').disabled = true;
+  let created;
+  try {
+    say($('subMsg'), `적재 중… ${parsed.rows.length.toLocaleString()}개 응답`, 'warn');
+    const groups = Object.entries(parsed.stat).map(([k, s]) => {
+      const [grade, subject] = k.split('|');
+      return { grade: +grade, subject, row_count: s.students,
+        rows: parsed.rows.filter(r => r.grade === +grade && r._s === subject).map(({ _s, ...r }) => r) };
+    });
+    created = await api('/api/submit', { exam: parsed.exam, groups });   // 서버가 실패 시 부분 적재를 되돌린다
+  } catch (err) {
+    $('submit').disabled = false;
+    return say($('subMsg'), err.message + '\n\n적재된 내용은 되돌렸습니다. 다시 시도하세요.');
+  }
+  $('subMsg').innerHTML = `<div class="msg ok">제출 완료 — 아래 접수번호를 캡처해 보관하세요.
+<table class="receipt">${created.map(c => `<tr><td>${c.grade}학년 ${esc(c.subject)}</td><td>${esc(c.id)}</td></tr>`).join('')}</table>
+${esc(new Date().toLocaleString('ko-KR'))} · ${esc(me.school_name)}</div>`;
+  say($('checkMsg'), ''); $('mapSec').hidden = true;
+};
+
+// ════════════════════════════════════════════════════
+// 분석 리포트 (학교)
+// ════════════════════════════════════════════════════
+// ── 툴팁 ────────────────────────────────────────────
+const tip = $('tip');
+function hover(el, text) {
+  el.addEventListener('mousemove', e => {
+    tip.textContent = text;
+    tip.style.opacity = 1;
+    tip.style.left = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8) + 'px';
+    tip.style.top = (e.clientY - tip.offsetHeight - 10) + 'px';
+  });
+  el.addEventListener('mouseleave', () => tip.style.opacity = 0);
+}
+
+async function loadReportExams() {
+  const ex = await api('/api/exams?open=1');
+  $('rExam').innerHTML = ex.map(x => `<option value="${esc(x.exam_code)}">${esc(x.exam_name)}</option>`).join('');
+  if (!ex.length) say($('rMsg'), '아직 열람 가능한 회차가 없습니다. 회차가 개방되면 볼 수 있습니다.');
+  $('rExam').onchange = loadGrades; loadGrades();
+}
+async function loadGrades() {   // 그 회차에 정답표가 있는 학년만
+  const exam = $('rExam').value;
+  const counts = exam ? await api('/api/item-counts?exam=' + encodeURIComponent(exam)) : [];
+  const grades = [...new Set(counts.map(c => c.grade))].sort();
+  $('rGrade').innerHTML = grades.map(g => `<option value="${g}">${g}학년</option>`).join('');
+}
+
+// ── 불러오기 ────────────────────────────────────────
+$('load').onclick = async () => {
+  const exam = $('rExam').value, grade = $('rGrade').value;
+  if (!exam || !grade) return;
+  $('load').disabled = true; $('xlsx').disabled = true;
+  say($('rMsg'), '불러오는 중…', 'ok');
+  try {
+    const { summary, items, dists, scores, marks } = await api(`/api/report?exam=${encodeURIComponent(exam)}&grade=${grade}`);
+    if (!items.length) throw new Error('데이터가 없습니다. 회차가 개방되었고 제출이 있는지 확인하세요.');
+    const subs = [...new Set(items.map(i => i.subject))].sort((a, b) => ORDER(a) - ORDER(b));
+    data = {
+      exam, name: `${$('rExam').selectedOptions[0].textContent} ${grade}학년`, subs, dists,
+      summary: summary.sort((a, b) => ORDER(a.subject) - ORDER(b.subject)),
+      items: items.sort((a, b) => ORDER(a.subject) - ORDER(b.subject) || a.q_no - b.q_no),
+      scores, marks,
+    };
+    render();
+    $('dash').hidden = false;
+    say($('rMsg'), '', 'ok');
+    $('xlsx').disabled = false;
+  } catch (err) {
+    say($('rMsg'), err.message);
+  }
+  $('load').disabled = false;
+};
+
+// ── SVG 기본 ────────────────────────────────────────
+const svgEl = (tag, attrs) => {
+  const e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+};
+// 데이터 끝만 둥근 세로 막대 (기준선 쪽은 각지게)
+function vbar(x, y, w, h, fill) {
+  const r = Math.min(4, w / 2, h);
+  const p = `M${x},${y + h} L${x},${y + r} Q${x},${y} ${x + r},${y} L${x + w - r},${y} Q${x + w},${y} ${x + w},${y + r} L${x + w},${y + h} Z`;
+  return svgEl('path', { d: p, fill, class: 'mark' });
+}
+
+// ── 화면 ────────────────────────────────────────────
+function render() {
+  renderTiles();
+  renderCompare();
+  renderPriority();
+  renderAttention();
+  $('subject').innerHTML = data.subs.map(s => `<option>${esc(s)}</option>`).join('');
+  $('subject').onchange = renderSubject;
+  renderSubject();
+  renderStudents();
+}
+
+function renderTiles() {
+  const nStu = new Set(data.scores.map(s => `${s.grade}-${s.class_no}-${s.student_no}`)).size;
+  const gaps = data.summary.filter(r => r.gap != null);
+  const worst = gaps.length ? gaps.reduce((a, b) => (+a.gap < +b.gap ? a : b)) : null;
+  const best = gaps.length ? gaps.reduce((a, b) => (+a.gap > +b.gap ? a : b)) : null;
+  const weak = data.items.filter(i => i.my_p_value != null && i.my_p_value - i.p_value <= -0.10).length;
+  const dull = data.items.filter(i => i.discrimination != null && i.discrimination < 0.2).length;
+  const allTakers = Math.max(...data.summary.map(r => r.all_takers ?? 0));
+
+  $('dashSub').textContent = `${data.name} · ${me.school_name} · 참여교 전체 ${allTakers}명 중 우리 학교 ${nStu}명`;
+  const tile = (k, v, s, color) =>
+    `<div class="tile"><div class="k">${esc(k)}</div><div class="v"${color ? ` style="color:${color}"` : ''}>${esc(v)}</div><div class="s">${esc(s)}</div></div>`;
+  $('tiles').innerHTML = [
+    tile('응시 학생', nStu + '명', `${data.subs.length}개 과목`),
+    worst ? tile('가장 약한 과목', worst.subject, `전체 평균 대비 ${num(worst.gap)}점`, worst.gap < 0 ? 'var(--critical)' : null) : '',
+    best ? tile('가장 강한 과목', best.subject, `전체 평균 대비 ${(+best.gap > 0 ? '+' : '') + num(best.gap)}점`, best.gap > 0 ? 'var(--good)' : null) : '',
+    tile('먼저 볼 문항', weak + '개', '전체보다 10%p 이상 낮음', weak ? 'var(--critical)' : null),
+    tile('변별력 낮은 문항', dull + '개', '변별도 0.2 미만'),
+  ].join('');
+}
+
+// 과목별 평균: 우리 학교 vs 전체 (2계열 묶은 막대)
+function renderCompare() {
+  const rows = data.summary;
+  const W = Math.max(560, rows.length * 130), H = 260, P = { t: 16, r: 12, b: 40, l: 44 };
+  const max = Math.max(...rows.flatMap(r => [+r.my_mean || 0, +r.all_mean || 0])) * 1.15 || 1;
+  const iw = W - P.l - P.r, ih = H - P.t - P.b;
+  const y = v => P.t + ih - (v / max) * ih;
+  const svg = svgEl('svg', { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: 'img' });
+
+  for (let i = 0; i <= 4; i++) {                       // 눈금은 뒤로 물린다
+    const v = max * i / 4, yy = y(v);
+    svg.append(svgEl('line', { x1: P.l, x2: W - P.r, y1: yy, y2: yy, class: 'grid' }));
+    const t = svgEl('text', { x: P.l - 8, y: yy + 4, 'text-anchor': 'end' });
+    t.textContent = v.toFixed(0); svg.append(t);
+  }
+  const band = iw / rows.length, bw = Math.min(26, band / 3.2);
+  rows.forEach((r, i) => {
+    const cx = P.l + band * (i + 0.5);
+    [['my_mean', 'var(--series-1)', '우리 학교'], ['all_mean', 'var(--series-2)', '전체']].forEach(([k, col, label], j) => {
+      const v = +r[k] || 0;
+      const x = cx - bw - 1 + j * (bw + 2);            // 막대 사이 2px 간격
+      const bar = vbar(x, y(v), bw, P.t + ih - y(v), col);
+      hover(bar, `${r.subject} · ${label}\n평균 ${num(r[k])}점 (${k === 'my_mean' ? r.my_takers : r.all_takers}명)`);
+      svg.append(bar);
+      const t = svgEl('text', { x: x + bw / 2, y: y(v) - 5, 'text-anchor': 'middle', class: 'val' });
+      t.textContent = num(r[k]); svg.append(t);        // 2계열뿐이므로 직접 라벨
+    });
+    const lab = svgEl('text', { x: cx, y: H - 20, 'text-anchor': 'middle' });
+    lab.textContent = r.subject; svg.append(lab);
+    const gap = svgEl('text', { x: cx, y: H - 6, 'text-anchor': 'middle' });
+    gap.textContent = (+r.gap > 0 ? '+' : '') + num(r.gap);
+    gap.setAttribute('fill', +r.gap < 0 ? 'var(--critical)' : 'var(--good)');
+    svg.append(gap);
+  });
+  svg.append(svgEl('line', { x1: P.l, x2: W - P.r, y1: P.t + ih, y2: P.t + ih, class: 'axis' }));
+  $('cmpChart').replaceChildren(svg);
+}
+
+function renderPriority() {
+  const rows = data.items
+    .filter(i => i.my_p_value != null && i.my_p_value - i.p_value <= -0.05)
+    .map(i => ({ ...i, gap: i.my_p_value - i.p_value }))
+    .sort((a, b) => a.gap - b.gap).slice(0, 15);
+  $('prioTable').innerHTML = rows.length
+    ? '<tr><th class="l">과목</th><th class="l">문항</th><th>배점</th><th>우리 정답률</th><th>전체 정답률</th><th>차이</th><th>변별도</th></tr>' +
+      rows.map(r => `<tr class="${r.gap <= -0.10 ? 'flag' : ''}"><td class="l">${esc(r.subject)}</td><td class="l">${r.q_no}번</td>
+        <td>${num(r.points)}</td><td class="weak">${pct(r.my_p_value)}</td><td>${pct(r.p_value)}</td>
+        <td class="weak">${pp(r.gap)}</td><td>${num(r.discrimination)}</td></tr>`).join('')
+    : '<tr><td class="l">전체보다 크게 낮은 문항이 없습니다.</td></tr>';
+}
+
+function renderAttention() {
+  const rows = [];
+  for (const s of data.subs)
+    for (const x of data.dists[s] ?? [])
+      if (!x.is_answer && x.choice !== '무응답' && x.rate_high != null && x.rate_high > x.rate_low)
+        rows.push({ subject: s, ...x, diff: x.rate_high - x.rate_low });
+  rows.sort((a, b) => b.diff - a.diff);
+  $('attnTable').innerHTML = rows.length
+    ? '<tr><th class="l">과목</th><th class="l">문항</th><th class="l">몰린 오답</th><th>상위 27%</th><th>하위 27%</th><th>상위−하위</th><th>전체 선택률</th></tr>' +
+      rows.slice(0, 15).map(r => `<tr><td class="l">${esc(r.subject)}</td><td class="l">${r.q_no}번</td>
+        <td class="l">${esc(r.choice)}번</td><td class="weak">${pct(r.rate_high)}</td><td>${pct(r.rate_low)}</td>
+        <td class="weak">${pp(r.diff)}</td><td>${pct(r.rate_all)}</td></tr>`).join('')
+    : '<tr><td class="l">상위권이 더 많이 고른 오답이 없습니다.</td></tr>';
+}
+
+// ── 과목별 상세 ─────────────────────────────────────
+function renderSubject() {
+  const sub = $('subject').value;
+  const rows = data.items.filter(i => i.subject === sub);
+  renderQmap(rows, sub);
+  renderClasses(sub);
+
+  $('itemTable').innerHTML =
+    '<tr><th class="l">문항</th><th class="l">유형</th><th>배점</th><th>전체 정답률</th><th>우리 정답률</th>' +
+    '<th>차이</th><th>변별도</th><th>D지수</th><th>무응답률</th></tr>' +
+    rows.map(r => {
+      const gap = r.my_p_value == null ? null : r.my_p_value - r.p_value;
+      const cls = gap == null ? '' : (gap <= -0.10 ? 'flag' : gap >= 0.10 ? 'good-bg' : '');
+      return `<tr class="${cls}"><td class="l">${r.q_no}</td><td class="l">${r.q_type === 'SA' ? '단답' : '객관'}</td>
+        <td>${num(r.points)}</td><td>${pct(r.p_value)}</td><td>${pct(r.my_p_value)}</td>
+        <td>${pp(gap)}</td><td>${num(r.discrimination)}</td><td>${num(r.d_index)}</td><td>${pct(r.blank_rate)}</td></tr>`;
+    }).join('');
+
+  const d = (data.dists[sub] ?? []).slice().sort((a, b) => a.q_no - b.q_no || String(a.choice).localeCompare(String(b.choice)));
+  $('distTable').innerHTML =
+    '<tr><th class="l">문항</th><th class="l">선택지</th><th class="l">정답</th><th>전체 선택률</th><th>상위 27%</th><th>하위 27%</th><th>상위−하위</th></tr>' +
+    d.map(x => `<tr><td class="l">${x.q_no}</td><td class="l">${esc(x.choice)}</td><td class="l">${x.is_answer ? '●' : ''}</td>
+      <td>${pct(x.rate_all)}</td><td class="${!x.is_answer && x.rate_high > x.rate_low ? 'weak' : ''}">${pct(x.rate_high)}</td>
+      <td>${pct(x.rate_low)}</td><td>${x.rate_high == null ? '' : pp(x.rate_high - x.rate_low)}</td></tr>`).join('');
+}
+
+// 문항 품질 맵: 가로 정답률, 세로 변별도
+function renderQmap(rows, sub) {
+  const W = 900, H = 320, P = { t: 16, r: 16, b: 38, l: 46 };
+  const iw = W - P.l - P.r, ih = H - P.t - P.b;
+  const ds = rows.map(r => +r.discrimination).filter(v => !isNaN(v));
+  const dMin = Math.min(0, ...ds), dMax = Math.max(0.6, ...ds);
+  const x = v => P.l + v * iw;
+  const y = v => P.t + ih - ((v - dMin) / (dMax - dMin)) * ih;
+  const svg = svgEl('svg', { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: 'img' });
+
+  for (let i = 0; i <= 5; i++) {
+    const xx = x(i / 5);
+    svg.append(svgEl('line', { x1: xx, x2: xx, y1: P.t, y2: P.t + ih, class: 'grid' }));
+    const t = svgEl('text', { x: xx, y: H - 20, 'text-anchor': 'middle' });
+    t.textContent = (i * 20) + '%'; svg.append(t);
+  }
+  [dMin, (dMin + dMax) / 2, dMax].forEach(v => {
+    const yy = y(v);
+    svg.append(svgEl('line', { x1: P.l, x2: W - P.r, y1: yy, y2: yy, class: 'grid' }));
+    const t = svgEl('text', { x: P.l - 8, y: yy + 4, 'text-anchor': 'end' });
+    t.textContent = v.toFixed(1); svg.append(t);
+  });
+  // 변별도 0.2 기준선
+  if (dMin < 0.2 && dMax > 0.2) {
+    svg.append(svgEl('line', { x1: P.l, x2: W - P.r, y1: y(0.2), y2: y(0.2),
+      stroke: 'var(--ink-2)', 'stroke-width': 1, 'stroke-dasharray': '4 4' }));
+    const t = svgEl('text', { x: W - P.r, y: y(0.2) - 5, 'text-anchor': 'end' });
+    t.textContent = '변별도 0.2'; svg.append(t);
+  }
+
+  rows.forEach(r => {
+    if (r.discrimination == null) return;
+    const gap = r.my_p_value == null ? 0 : r.my_p_value - r.p_value;
+    const weak = gap <= -0.10;
+    const c = svgEl('circle', {
+      cx: x(+r.p_value), cy: y(+r.discrimination), r: weak ? 7 : 5,
+      fill: weak ? 'var(--critical)' : 'var(--series-1)',
+      stroke: 'var(--surface)', 'stroke-width': 2, class: 'mark',   // 겹칠 때 2px 링
+    });
+    hover(c, `${sub} ${r.q_no}번 (${r.q_type === 'SA' ? '단답' : '객관'} ${num(r.points)}점)\n` +
+      `전체 정답률 ${pct(r.p_value)} · 우리 ${pct(r.my_p_value)} (${pp(gap)})\n변별도 ${num(r.discrimination)} · 무응답 ${pct(r.blank_rate)}`);
+    svg.append(c);
+    if (weak) {   // 붉은 점만 직접 라벨
+      const t = svgEl('text', { x: x(+r.p_value), y: y(+r.discrimination) - 11, 'text-anchor': 'middle', class: 'val' });
+      t.textContent = r.q_no; svg.append(t);
+    }
+  });
+  svg.append(svgEl('line', { x1: P.l, x2: W - P.r, y1: P.t + ih, y2: P.t + ih, class: 'axis' }));
+  const xl = svgEl('text', { x: P.l + iw / 2, y: H - 4, 'text-anchor': 'middle' });
+  xl.textContent = '전체 정답률 →'; svg.append(xl);
+  $('qmap').replaceChildren(svg);
+}
+
+function renderClasses(sub) {
+  const by = {};
+  data.scores.filter(s => s.subject === sub).forEach(s => {
+    (by[s.class_no] ??= []).push(+s.raw_score);
+  });
+  const rows = Object.entries(by).map(([c, v]) =>
+    ({ c: +c, n: v.length, mean: v.reduce((a, b) => a + b, 0) / v.length })).sort((a, b) => a.c - b.c);
+  if (!rows.length) return $('classChart').replaceChildren();
+
+  const all = data.summary.find(r => r.subject === sub)?.all_mean;
+  const W = Math.max(420, rows.length * 76), H = 200, P = { t: 16, r: 12, b: 36, l: 44 };
+  const iw = W - P.l - P.r, ih = H - P.t - P.b;
+  const max = Math.max(...rows.map(r => r.mean), +all || 0) * 1.15 || 1;
+  const y = v => P.t + ih - (v / max) * ih;
+  const svg = svgEl('svg', { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: 'img' });
+
+  for (let i = 0; i <= 4; i++) {
+    const v = max * i / 4, yy = y(v);
+    svg.append(svgEl('line', { x1: P.l, x2: W - P.r, y1: yy, y2: yy, class: 'grid' }));
+    const t = svgEl('text', { x: P.l - 8, y: yy + 4, 'text-anchor': 'end' });
+    t.textContent = v.toFixed(0); svg.append(t);
+  }
+  const band = iw / rows.length, bw = Math.min(34, band - 10);
+  rows.forEach((r, i) => {
+    const x = P.l + band * i + (band - bw) / 2;
+    const bar = vbar(x, y(r.mean), bw, P.t + ih - y(r.mean), 'var(--series-1)');
+    hover(bar, `${r.c}반 · ${r.n}명\n평균 ${r.mean.toFixed(2)}점`);
+    svg.append(bar);
+    const t = svgEl('text', { x: x + bw / 2, y: y(r.mean) - 5, 'text-anchor': 'middle', class: 'val' });
+    t.textContent = r.mean.toFixed(1); svg.append(t);
+    const lab = svgEl('text', { x: x + bw / 2, y: H - 18, 'text-anchor': 'middle' });
+    lab.textContent = r.c + '반'; svg.append(lab);
+  });
+  if (all != null) {   // 전체 평균 기준선
+    svg.append(svgEl('line', { x1: P.l, x2: W - P.r, y1: y(+all), y2: y(+all),
+      stroke: 'var(--series-2)', 'stroke-width': 2, 'stroke-dasharray': '5 4' }));
+    const t = svgEl('text', { x: W - P.r, y: y(+all) - 5, 'text-anchor': 'end' });
+    t.textContent = `전체 평균 ${num(all)}`; t.setAttribute('fill', 'var(--series-2)'); svg.append(t);
+  }
+  svg.append(svgEl('line', { x1: P.l, x2: W - P.r, y1: P.t + ih, y2: P.t + ih, class: 'axis' }));
+  $('classChart').replaceChildren(svg);
+}
+
+function renderStudents() {
+  const by = {};
+  data.scores.forEach(s => {
+    const k = `${s.grade}-${s.class_no}-${s.student_no}`;
+    (by[k] ??= { g: s.grade, c: s.class_no, n: s.student_no })[s.subject] = s.raw_score;
+  });
+  $('stuTable').innerHTML =
+    '<tr><th class="l">학년</th><th class="l">반</th><th class="l">번호</th>' +
+    data.subs.map(s => `<th>${esc(s)}</th>`).join('') + '<th>합계</th></tr>' +
+    Object.values(by).map(r => {
+      const tot = data.subs.reduce((a, s) => a + (+r[s] || 0), 0);
+      return `<tr><td class="l">${r.g}</td><td class="l">${r.c}</td><td class="l">${r.n}</td>` +
+        data.subs.map(s => `<td>${r[s] ?? ''}</td>`).join('') + `<td>${tot}</td></tr>`;
+    }).join('');
+}
+
+// ── 엑셀 저장 ───────────────────────────────────────
+$('xlsx').onclick = async () => {
+  $('xlsx').disabled = true;
+  const wb = new ExcelJS.Workbook();
+  const head = (ws, cols) => {
+    ws.columns = cols;
+    ws.getRow(1).font = { bold: true };
+    ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEFF1F3' } };
+    ws.views = [{ state: 'frozen', ySplit: 1 }];
+    ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: cols.length } };
+  };
+  const RED = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFDE7E7' } };
+  const GREEN = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F5EC' } };
+
+  const s1 = wb.addWorksheet('과목별 요약');
+  head(s1, [
+    { header: '과목', key: 'subject', width: 10 }, { header: '우리 응시', key: 'my_takers', width: 10 },
+    { header: '우리 평균', key: 'my_mean', width: 10 }, { header: '우리 표준편차', key: 'my_sd', width: 12 },
+    { header: '전체 응시', key: 'all_takers', width: 10 }, { header: '전체 평균', key: 'all_mean', width: 10 },
+    { header: '전체 표준편차', key: 'all_sd', width: 12 }, { header: '차이', key: 'gap', width: 8 },
+  ]);
+  data.summary.forEach(r => { const row = s1.addRow(r); if (r.gap < 0) row.getCell('gap').fill = RED; });
+
+  const s2 = wb.addWorksheet('문항분석');
+  head(s2, [
+    { header: '과목', key: 'subject', width: 10 }, { header: '문항', key: 'q_no', width: 6 },
+    { header: '유형', key: 'q_type', width: 6 }, { header: '배점', key: 'points', width: 6 },
+    { header: '전체 정답률', key: 'p_value', width: 11 }, { header: '우리 정답률', key: 'my_p', width: 11 },
+    { header: '차이(%p)', key: 'gap', width: 10 }, { header: '변별도', key: 'discrimination', width: 9 },
+    { header: 'D지수', key: 'd_index', width: 8 }, { header: '무응답률', key: 'blank_rate', width: 10 },
+  ]);
+  data.items.forEach(r => {
+    const gap = r.my_p_value == null ? null : (r.my_p_value - r.p_value) * 100;
+    const row = s2.addRow({ ...r, q_type: r.q_type === 'SA' ? '단답' : '객관', my_p: r.my_p_value, gap });
+    ['p_value', 'my_p', 'blank_rate'].forEach(k => row.getCell(k).numFmt = '0.0%');
+    if (gap != null && gap <= -10) row.getCell('gap').fill = RED;
+    if (gap != null && gap >= 10) row.getCell('gap').fill = GREEN;
+    if (r.discrimination != null && r.discrimination < 0.2) row.getCell('discrimination').fill = RED;
+  });
+
+  const s3 = wb.addWorksheet('오답지 매력도');
+  head(s3, [
+    { header: '과목', key: 'subject', width: 10 }, { header: '문항', key: 'q_no', width: 6 },
+    { header: '선택지', key: 'choice', width: 8 }, { header: '정답', key: 'is_answer', width: 6 },
+    { header: '전체 선택률', key: 'rate_all', width: 11 }, { header: '상위 27%', key: 'rate_high', width: 10 },
+    { header: '하위 27%', key: 'rate_low', width: 10 }, { header: '상위−하위', key: 'diff', width: 10 },
+  ]);
+  data.subs.forEach(subject => (data.dists[subject] ?? []).forEach(x => {
+    const row = s3.addRow({ ...x, subject, is_answer: x.is_answer ? 'O' : '',
+      diff: x.rate_high == null ? null : x.rate_high - x.rate_low });
+    ['rate_all', 'rate_high', 'rate_low', 'diff'].forEach(k => row.getCell(k).numFmt = '0.0%');
+    if (!x.is_answer && x.rate_high > x.rate_low) row.getCell('rate_high').fill = RED;
+  }));
+
+  const s4 = wb.addWorksheet('학생별 원점수');
+  head(s4, [{ header: '학년', key: 'g', width: 6 }, { header: '반', key: 'c', width: 6 }, { header: '번호', key: 'n', width: 6 },
+    ...data.subs.map(s => ({ header: s, key: s, width: 9 })), { header: '합계', key: 'tot', width: 9 }]);
+  const by = {};
+  data.scores.forEach(s => {
+    const k = `${s.grade}-${s.class_no}-${s.student_no}`;
+    (by[k] ??= { g: s.grade, c: s.class_no, n: s.student_no })[s.subject] = s.raw_score;
+  });
+  Object.values(by).forEach(r => s4.addRow({ ...r, tot: data.subs.reduce((a, s) => a + (+r[s] || 0), 0) }));
+
+  const maxQ = Math.max(...data.items.map(i => i.q_no));
+  const s5 = wb.addWorksheet('학생별 정오표');
+  head(s5, [{ header: '과목', key: 'subject', width: 10 }, { header: '학년', key: 'g', width: 6 },
+    { header: '반', key: 'c', width: 6 }, { header: '번호', key: 'n', width: 6 },
+    ...Array.from({ length: maxQ }, (_, i) => ({ header: String(i + 1), key: 'q' + (i + 1), width: 4 }))]);
+  const grid = {};
+  data.marks.forEach(m => {
+    const k = `${m.subject}|${m.grade}-${m.class_no}-${m.student_no}`;
+    (grid[k] ??= { subject: m.subject, g: m.grade, c: m.class_no, n: m.student_no })['q' + m.q_no] = m.is_correct ? 'O' : 'X';
+  });
+  Object.values(grid)
+    .sort((a, b) => ORDER(a.subject) - ORDER(b.subject) || a.c - b.c || a.n - b.n)
+    .forEach(r => {
+      const row = s5.addRow(r);
+      for (let q = 1; q <= maxQ; q++) if (row.getCell('q' + q).value === 'X') row.getCell('q' + q).fill = RED;
+    });
+
+  const buf = await wb.xlsx.writeBuffer();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  a.download = `${data.name}_${me.school_name}_분석.xlsx`.replace(/[\\/:*?"<>|]/g, '_');
+  a.click();
+  URL.revokeObjectURL(a.href);
+  $('xlsx').disabled = false;
+};
+</script>
+</body>
+</html>
