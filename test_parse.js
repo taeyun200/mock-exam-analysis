@@ -95,3 +95,33 @@ assert(!abnormal.some(a => a.subject === '수학' && /^\s*\d+$/.test(a.raw) && a
 // 리딩 업체도 이 값들을 전부 오답 처리했다 — 우리 방침과 일치하는지 확인
 assert(abnormal.every(a => a.ox === 'X'), '리딩 업체가 정답 처리한 비정상 마킹이 있음');
 console.log(`비정상 마킹 ${abnormal.length}건 — 전부 리딩 업체도 오답(X) 처리, 방침 일치`);
+
+// ── 두 번째 리딩 프로그램 형식 (CP949 CSV, '1번'~'60번' 헤더, 과목명 '사회탐구'/'과학탐구') ──
+const real2 = process.argv[3] || 'D:/blsm omr리딩 결과.csv';
+if (!fs.existsSync(real2)) { console.log('실물 CSV(2) 없음 — 건너뜀:', real2); process.exit(0); }
+const buf = fs.readFileSync(real2);
+assert.throws(() => new TextDecoder('utf-8', { fatal: true }).decode(buf), 'CP949 파일은 UTF-8로 읽히면 안 된다');
+const csvText = new TextDecoder('euc-kr').decode(buf);
+const sheet2 = XLSX.utils.sheet_to_json(XLSX.read(csvText, { type: 'string', raw: false }).Sheets.Sheet1, { header: 1, defval: '', blankrows: false });
+const d2 = mk(sheet2);
+assert.deepStrictEqual(
+  { hdr: d2.hdr, grade: d2.grade, cls: d2.cls, no: d2.no, subject: d2.subject, firstQ: d2.firstQ, firstRow: d2.firstRow },
+  { hdr: 0, grade: 1, cls: 2, no: 3, subject: 5, firstQ: 6, firstRow: 1 }, 'CSV(2) 열 인식');
+const aliasSrc = src.match(/const SUBJECT_ALIAS = [\s\S]*?\nconst canonSubject = .*\n/);
+assert(aliasSrc, 'index.html에서 canonSubject를 찾지 못했습니다');
+const canonSubject = new Function(aliasSrc[0] + 'return canonSubject;')();
+const subs2 = new Set(sheet2.slice(d2.firstRow).map(r => canonSubject(r[d2.subject])).filter(Boolean));
+assert.deepStrictEqual([...subs2].sort(), SUBJ.slice().sort(), '과목명 정규화 (사회탐구→사회, 과학탐구→과학)');
+const stu2 = new Set(sheet2.slice(d2.firstRow).map(r => [r[d2.grade], r[d2.cls], r[d2.no]].join('-')));
+assert.strictEqual(stu2.size, 190, 'CSV(2) 학생 수');
+// 미완성 단답('12N')과 복수 마킹('25')은 비정상으로 잡혀 오답 처리돼야 한다
+const bad2 = [];
+for (const r of sheet2.slice(d2.firstRow)) {
+  const sub = canonSubject(r[d2.subject]);
+  for (let q = 1; q <= NQ[sub]; q++) {
+    const v = String(r[d2.firstQ + q - 1] ?? '').trim();
+    if (v && !(SA[sub]?.has(q) ? /^\d+$/.test(v) : /^[1-5]$/.test(v))) bad2.push(v);
+  }
+}
+assert(bad2.includes('12N') && bad2.includes('25'), '비정상 마킹 검출: ' + bad2.join(','));
+console.log(`실물 CSV(2) 통과 — CP949 디코딩, ${stu2.size}명, 과목 정규화, 비정상 마킹 ${bad2.length}건 검출`);

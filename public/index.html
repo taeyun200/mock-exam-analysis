@@ -571,8 +571,19 @@ async function loadSubmitExams() {
 $('cExam').onchange = () => { if (sheet.length) remap(); };
 
 // ── 파일 읽기 ───────────────────────────────────────
+// CSV는 리딩 프로그램에 따라 UTF-8 또는 CP949(EUC-KR)로 온다. UTF-8로 안 읽히면 CP949로 읽는다.
+function decodeText(buf) {
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); }
+  catch { return new TextDecoder('euc-kr').decode(buf); }
+}
+// 리딩 프로그램마다 과목명이 다르다: '사회탐구'→'사회', '과학탐구'→'과학'
+const SUBJECT_ALIAS = { 사회탐구: '사회', 과학탐구: '과학', 사탐: '사회', 과탐: '과학' };
+const canonSubject = s => { const t = String(s ?? '').trim(); return SUBJECT_ALIAS[t] ?? t; };
 async function read(file) {
-  const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', raw: false });
+  const buf = await file.arrayBuffer();
+  const wb = /.csv$/i.test(file.name)
+    ? XLSX.read(decodeText(buf).replace(/^﻿/, ''), { type: 'string', raw: false })
+    : XLSX.read(buf, { type: 'array', raw: false });
   sheet = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '', blankrows: false });
   if (sheet.length < 3) return say($('checkMsg'), '내용이 거의 없는 파일입니다.');
   buildMapUI();
@@ -641,7 +652,7 @@ async function remap() {
   const errors = [], warns = [], rows = [], seen = new Set(), stat = {};
   for (let r = m.firstRow; r < sheet.length; r++) {
     const line = sheet[r];
-    const subject = String(line[m.subject] ?? '').trim();
+    const subject = canonSubject(line[m.subject]);
     if (!subject && !String(line[m.no] ?? '').trim()) continue;   // 빈 행
     const at = `${r + 1}행`;
 

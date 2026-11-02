@@ -67,7 +67,7 @@ const keyFile = process.argv[2] || 'D:/자료/USB 드라이브/업무/0. 오창�
 if (!fs.existsSync(keyFile)) { console.log('실물 정답표 없음 — 건너뜀:', keyFile); process.exit(0); }
 
 const wb = XLSX.read(fs.readFileSync(keyFile), { type: 'buffer', raw: false });
-const keys = parseSheet(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '', blankrows: false }), '2026-03');
+const keys = parseSheet(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '', blankrows: false }), '2026-03', 2);
 
 const by = {};
 keys.forEach(k => (by[k.subject] ??= []).push(k));
