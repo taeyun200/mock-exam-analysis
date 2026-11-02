@@ -88,3 +88,28 @@ assert(by.수학.filter(k => k.q_type === 'MC').every(k => k.q_no <= 21), '객�
 assert.deepStrictEqual(validate(keys).errors, [], '파싱 결과가 검증을 통과하지 못함');
 
 console.log('정답일람표 파서 통과 — ' + Object.entries(shape).map(([s, v]) => `${s} ${v.n}문항 ${v.pts}점`).join(', '));
+
+// ── 교육청 통계자료(.xls) → freq_dist 행 (stat_upload.py 와 같은 결과여야 한다) ──
+const pStats = src.match(/function parseStats\(wb\) \{[\s\S]*?\n\}/);
+assert(pStats, 'index.html에서 parseStats()를 찾지 못했습니다');
+const canonSubject = s => ({ 사회탐구: '사회', 과학탐구: '과학' })[String(s ?? '').trim()] ?? String(s ?? '').trim();
+const parseStats = new Function('XLSX', 'SUBJECTS', 'canonSubject', pStats[0] + '\nreturn parseStats;')(XLSX, SUBJECTS, canonSubject);
+const statFile = 'D:/자료/USB 드라이브/진협자료/입시자료/모의고사, 수능 성적 결과자료/2026/4.2026학년도 9월 고2 전국연합학력평가 통계자료.xls';
+if (fs.existsSync(statFile)) {
+  const p = parseStats(XLSX.read(fs.readFileSync(statFile), { type: 'buffer', raw: false }));
+  assert.deepStrictEqual([p.exam, p.grade, p.rows.length], ['2026_9', 2, 957], '통계자료: 회차·학년·행 수 (stat_upload.py 결과 957행)');
+  const cnt = {}; p.rows.forEach(r => { cnt[r.row_type] = (cnt[r.row_type] ?? 0) + 1; });
+  assert.deepStrictEqual(cnt, { 표준점수: 265, 계: 265, '누적(계)': 265, 점수: 54, 인원: 54, 비율: 54 }, '행 유형별 개수');
+  const cut1 = p.rows.find(r => r.subject === '국어' && r.row_type === '점수' && r.idx === 1);
+  assert.strictEqual(cut1.value, 135, '국어 1등급 구분점수(표준점수)');
+  assert.strictEqual(p.rows.find(r => r.subject === '영어' && r.row_type === '점수' && r.idx === 1).value, 90, '영어 1등급(원점수)');
+  console.log('통계자료 파서 통과 — 2026_9 고2 957행, stat_upload.py 와 일치');
+} else console.log('실물 통계자료 없음 — 건너뜀:', statFile);
+
+// ── 정답일람표 제목에서 회차·학년 자동 인식 ──
+const pDet = src.match(/function detectExam\(sheet\) \{[\s\S]*?\n\}/);
+const detectExam = new Function(pDet[0] + '\nreturn detectExam;')();
+assert.deepStrictEqual(detectExam([['국어 정답일람표 [01]'], ['2026학년도 2학년 4회 10월 모의고사', '', '작성일자']]), { exam_code: '2026-10', grade: 2 });
+assert.deepStrictEqual(detectExam([['국어 정답일람표'], ['2026학년도 1학년 1회 3월 모의고사']]), { exam_code: '2026-03', grade: 1 });
+assert.strictEqual(detectExam([['제목 없음']]), null);
+console.log('정답일람표 회차 자동 인식 통과');

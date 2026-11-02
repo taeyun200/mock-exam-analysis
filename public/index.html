@@ -75,8 +75,8 @@
   .msg.err  { background: #fdecec; color: #8c1c1c; }
   .msg.warn { background: #fff6e5; color: #7a4a00; }
   .msg.ok   { background: #e8f5ec; color: #14532d; }
-  #kDrop, #cDrop { border: 2px dashed #c3c9d0; border-radius: 10px; padding: 30px; text-align: center; color: var(--muted); cursor: pointer; }
-  #kDrop.over, #cDrop.over { border-color: var(--navy); background: #f0f1f3; }
+  #kDrop, #cDrop, #fDrop, #dDrop { border: 2px dashed #c3c9d0; border-radius: 10px; padding: 30px; text-align: center; color: var(--muted); cursor: pointer; }
+  #kDrop.over, #cDrop.over, #fDrop.over, #dDrop.over { border-color: var(--navy); background: #f0f1f3; }
   .receipt { font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
 
   /* 리포트 */
@@ -98,6 +98,15 @@
   .flag { background: #fdecec; }
   .good-bg { background: #e8f5ec; }
   .weak { color: var(--critical); font-weight: 600; }
+  /* 입력 현황 칩: 회차 × 학년 칸에 정답표·EBS·통계 세 개 */
+  .chip { display: inline-block; font-size: 11.5px; line-height: 1; padding: 4px 7px; border-radius: 999px; margin: 1px 2px 1px 0; border: 1px solid var(--line); color: var(--muted); background: #fff; white-space: nowrap; }
+  .chip.ok { background: #e8f5ec; color: #14532d; border-color: #cfe9d6; }
+  .chip.run { background: #fff6e5; color: #7a4a00; border-color: #f5dfb3; }
+  .chip.bad { background: #fdecec; color: #8c1c1c; border-color: #f3c6c6; cursor: help; }
+  .chip.warn { border-color: #e6c200; cursor: help; }
+  td.cell { white-space: normal; min-width: 230px; }
+  td.cell > div + div { margin-top: 3px; }
+  td.none { color: #c3c9d0; text-align: center; }
 
   /* 로그인 게이트 */
   .gate { position: fixed; inset: 0; z-index: 100; background: var(--bg); display: flex; align-items: center; justify-content: center; }
@@ -276,22 +285,32 @@
   </section>
 
   <section class="view card" id="v-exams" hidden>
-      <h2>회차</h2>
+      <h2>회차 열기·닫기</h2>
+      <p class="muted">회차를 열면 학교들이 OMR 파일을 올릴 수 있고, 정답 DB 서버(엑셀 학평 분석과 공용)에서 그 회차 정답표를 자동으로 가져옵니다.
+        수집을 닫으면 정답표를 한 번 더 받아(정답 정정 반영) 분석 리포트가 열리고, 새 제출은 막힙니다.</p>
       <form class="row" id="examForm">
-        <input id="eCode" placeholder="2026-09" required size="10">
-        <input id="eName" placeholder="회차 이름" required>
-        <input id="eDate" type="date">
-        <button>추가</button>
+        <label>연도 <select id="eYear"></select></label>
+        <label>월 <select id="eMonth"><option value="3">3월</option><option value="6">6월</option><option value="9">9월</option><option value="10">10월</option><option value="11">11월</option></select></label>
+        <label>시행일 <input id="eDate" type="date"></label>
+        <button>회차 열기 (수집 시작)</button>
       </form>
-      <p class="muted">개방 = 정답표·리포트 열람 허용. 개방하면 새 제출이 막힙니다.</p>
+      <div id="examMsgA"></div>
       <table id="examTable"></table>
   </section>
 
   <section class="view card" id="v-keys" hidden>
-      <h2>정답·배점표 업로드</h2>
+      <h2>입력 현황</h2>
+      <p class="muted">회차 × 학년, 기준은 정답 DB 서버(엑셀과 공용)라 이미 올라간 자료는 다시 올릴 필요가 없습니다.
+        윗줄 = 가채점(EBS, 자동): <span class="chip ok">오답률 90</span><span class="chip ok">등급컷 54</span><span class="chip ok">단원 190</span>
+        아랫줄 = 실채점: <span class="chip ok">정답표 ✓</span><span class="chip ok">정답률 190</span><span class="chip ok">도수 ✓</span><span class="chip ok">등급점수 ✓</span>
+        (정답표 = 정답일람표, 정답률 = 성적통지표 A~E, 도수·등급점수 = 교육청 통계자료). 일부만 있으면 노랑(n/기대), 마우스를 올리면 자세한 내용.</p>
+      <div class="scroll"><table id="statusTable"></table></div>
+
+      <h2 style="margin-top:22px">정답·배점표 업로드</h2>
       <div class="row">
         <label>회차 <select id="keyExam"></select></label>
         <label>학년 <select id="keyGrade"><option value="1">1학년</option><option value="2" selected>2학년</option><option value="3">3학년</option></select></label>
+        <span class="muted">정답일람표(.xls)는 파일 제목에서 회차·학년을 읽습니다. 이 선택은 CSV용입니다.</span>
       </div>
       <p class="muted">리딩 업체의 <b>정답일람표</b>(.xls/.xlsx)를 그대로 올리거나,
         직접 만든 CSV(exam_code, grade, subject, q_no, answer, points, q_type, unit)를 올리세요.
@@ -299,12 +318,22 @@
       <div id="kDrop">정답표 파일을 여기에 끌어다 놓거나 클릭해서 선택</div>
       <input type="file" id="kFile" accept=".xls,.xlsx,.csv" hidden>
       <div id="keyMsg"></div>
+      <p class="muted" style="margin-top:14px">정답표를 올리면 정답 DB 서버에도 저장되고, 그 회차·학년의 EBS 자료(오답률·등급컷·단원)를 바로 가져옵니다.
+        회차를 열 때 정답 DB 서버에 이미 정답표가 있으면 자동으로 받아오므로, 그때는 올릴 필요가 없습니다.</p>
 
-      <h2 style="margin-top:22px">정답 DB 서버 (엑셀 학평 분석과 공용)</h2>
-      <p class="muted">엑셀 '자료 받기'가 읽는 서버에 있는 정답표입니다. 가져오면 이 서버의 같은 회차·학년 정답표를 덮어씁니다.
-        위에서 정답표를 올리면 그 서버에도 자동으로 보냅니다.</p>
-      <div id="bridgeMsg"></div>
-      <table id="bridgeTable"></table>
+      <h2 style="margin-top:22px">통계자료 업로드 (교육청 '전국연합학력평가 통계자료')</h2>
+      <p class="muted">받은 <b>통계자료 .xls</b>를 그대로 올리세요. 시행일·학년은 파일 제목에서 읽고, 표준점수 누적도수(국·수·사·과)와 영역별 등급구분점수(6과목)를
+        정답 DB 서버 freq_dist에 저장합니다(같은 키는 덮어씀). 예전 long 형식 CSV(exam, grade, subject, row_type, idx, value)도 됩니다.</p>
+      <div id="fDrop">통계자료 .xls/.xlsx 또는 CSV를 여기에 끌어다 놓거나 클릭해서 선택</div>
+      <input type="file" id="fFile" accept=".xls,.xlsx,.csv" hidden>
+      <div id="freqMsg"></div>
+
+      <h2 style="margin-top:22px">전국 정답률 업로드 (성적통지표 문항표 A~E)</h2>
+      <p class="muted">CSV 열 이름 <code>exam, grade, subject, q_no, difficulty</code> (exam은 2026_9 형식, difficulty는 A~E).
+        성적통지표 PDF에서 뽑는 건 기존 <code>meta_upload.py</code>가 만든 CSV를 그대로 올리면 됩니다. 정답 DB 서버 정답표의 정답률 칸만 채우고 정답·배점은 건드리지 않습니다.</p>
+      <div id="dDrop">정답률 CSV를 여기에 끌어다 놓거나 클릭해서 선택</div>
+      <input type="file" id="dFile" accept=".csv" hidden>
+      <div id="diffMsg"></div>
   </section>
 
   <section class="view card" id="v-accounts" hidden>
@@ -394,24 +423,7 @@ $('sbBackdrop').onclick = () => document.body.classList.remove('sb-open');
 // ════════════════════════════════════════════════════
 // 관리 (운영자)
 // ════════════════════════════════════════════════════
-async function loadAll() { await Promise.all([loadSchools(), loadExams(), loadAccounts(), loadBridge()]); }
-
-// ── 정답 DB 서버 다리 ───────────────────────────────
-async function loadBridge() {
-  let rows;
-  try { rows = await api('/api/bridge/status'); } catch (err) { return say($('bridgeMsg'), '정답 DB 서버 조회 실패: ' + err.message); }
-  $('bridgeTable').innerHTML = '<tr><th>회차</th><th>학년</th><th>문항 수</th><th></th></tr>' +
-    rows.map(r => `<tr><td>${esc(r.exam)}</td><td>${r.grade}학년</td><td>${r.n}</td>
-      <td><button class="ghost" data-pull="${esc(r.exam)}|${r.grade}">가져오기</button></td></tr>`).join('');
-  $('bridgeTable').querySelectorAll('[data-pull]').forEach(b => b.onclick = async () => {
-    const [exam, grade] = b.dataset.pull.split('|');
-    if (!confirm(`${exam} ${grade}학년 정답표를 정답 DB 서버에서 가져와 이 서버의 정답표를 덮어쓸까요?`)) return;
-    try {
-      const r = await api('/api/bridge/pull', { exam, grade: +grade });
-      say($('bridgeMsg'), `${r.exam} ${r.grade}학년 ${r.n}문항 가져옴`, true); loadExams();
-    } catch (err) { say($('bridgeMsg'), err.message); }
-  });
-}
+async function loadAll() { await Promise.all([loadSchools(), loadExams(), loadAccounts()]); }
 
 // ── 학교 ────────────────────────────────────────────
 async function loadSchools() {
@@ -430,27 +442,85 @@ $('schoolForm').onsubmit = async e => {
 };
 
 // ── 회차 ────────────────────────────────────────────
+// 정답표 자동 가져오기 결과 문구: {1:190, 2:190, 3:0} → "1학년 190 · 2학년 190"
+const pulledText = (pulled, err) => err ? `정답 DB 서버 연결 실패: ${err}`
+  : Object.entries(pulled ?? {}).filter(([, n]) => n).map(([g, n]) => `${g}학년 ${n}문항`).join(' · ') || '정답 DB 서버에 이 회차 정답표가 아직 없음';
+// 회차 x의 g학년 칸 — 기준은 정답 DB 서버(sb). 두 줄: 가채점(EBS 오답률·등급컷·단원) / 실채점(정답표·정답률·도수분포·등급점수).
+// 건수 칩: 기대치를 채우면 초록, 일부면 노랑(n/기대), 없으면 회색 '–'.
+const cnt = (label, n, want, tip) => n >= want ? `<span class="chip ok" title="${tip}: ${n}">${label} ${n}</span>`
+  : n ? `<span class="chip warn" title="${tip}: ${n} / 기대 ${want}">${label} ${n}/${want}</span>` : `<span class="chip" title="${tip} 없음">${label} –</span>`;
+const flag = (label, ok, tip) => ok ? `<span class="chip ok" title="${tip} 있음">${label} ✓</span>` : `<span class="chip" title="${tip} 없음">${label} –</span>`;
+function gradeCell(x, g) {
+  const b = x.sb?.[g], n = x.keys?.[g], j = x.ebs?.[g];
+  if (x.sb === null) return '<td class="cell"><span class="chip bad" title="' + esc(x.sb_error ?? '') + '">정답 DB 서버 조회 실패</span></td>';
+  if (!b && !n && !j) return '<td class="none">–</td>';
+  const ebs = j?.status === 'running' ? '<span class="chip run" title="EBSi에서 가져오는 중">EBS ⏳</span>'
+    : j?.status === 'error' ? `<span class="chip bad" title="${esc(j.summary)}">EBS ✗</span>`
+    : cnt('오답률', b?.items ?? 0, 90, 'EBS 오답률 TOP15 (6과목×15)') + cnt('등급컷', b?.cuts ?? 0, 54, 'EBS 등급컷 (6과목×9등급)') + cnt('단원', b?.units ?? 0, 190, 'EBSi 문항별 단원 분류');
+  const warn = j?.warnings ? `<span class="chip warn" title="${esc(j.warnings)}">⚠</span>` : '';
+  const local = n ? `이 서버에 ${n}문항 받음` : '이 서버엔 아직 안 받음 (회차 열면 자동)';
+  const key = b?.subjects >= 6 ? `<span class="chip ok" title="정답 DB 서버에 6과목 · ${local}">정답표 ✓</span>`
+    : b?.subjects ? `<span class="chip warn" title="정답 DB 서버에 ${b.subjects}과목만 · ${local}">정답표 ${b.subjects}/6</span>`
+    : `<span class="chip${n ? ' warn' : ''}" title="정답 DB 서버에 없음${n ? ' · 이 서버에만 ' + n + '문항' : ''}">정답표 –</span>`;
+  return `<td class="cell"><div>${ebs}${warn}</div><div>${key}${cnt('정답률', b?.diff ?? 0, 190, '전국 정답률 A~E (성적통지표)')}${flag('도수', b?.freq, '표준점수 도수분포')}${flag('등급점수', b?.cutpts, '등급구분점수')}</div></td>`;
+}
+const gradeHeads = '<th>1학년</th><th>2학년</th><th>3학년</th>';
+const gradeCells = x => [1, 2, 3].map(g => gradeCell(x, g)).join('');
+
+let examPoll = null;
+
 async function loadExams() {
-  const data = await api('/api/exams');
-  $('examTable').innerHTML = '<tr><th>코드</th><th>이름</th><th>일자</th><th>상태</th></tr>' +
-    (data ?? []).map(x => `<tr><td>${esc(x.exam_code)}</td><td>${esc(x.exam_name)}</td><td>${esc(x.exam_date)}</td>
-      <td><button class="ghost" data-code="${esc(x.exam_code)}" data-to="${!x.is_open}">
-      ${x.is_open ? '개방됨 → 닫기' : '수집중 → 개방'}</button></td></tr>`).join('');
-  $('keyExam').innerHTML = (data ?? []).map(x => `<option value="${esc(x.exam_code)}">${esc(x.exam_name)}</option>`).join('');
+  const data = await api('/api/exams?status=1');
+  const name = x => `${esc(x.exam_name)} <span class="muted">${esc(x.exam_code)}</span>`;
+  const opened = (data ?? []).filter(x => x.opened);
+  $('examTable').innerHTML = `<tr><th>회차</th><th>시행일</th>${gradeHeads}<th>상태</th><th></th></tr>` +
+    (data ?? []).map(x => `<tr><td>${name(x)}</td><td>${esc(x.exam_date)}</td>${gradeCells(x)}
+      <td>${!x.opened ? '<span class="muted">미개설</span>' : x.is_open ? '분석 열림' : '<b>수집 중</b>'}</td>
+      <td>${!x.opened ? `<button class="ghost" data-open="${esc(x.exam_code)}">회차 열기 (수집 시작)</button>` :
+        `<button class="ghost" data-code="${esc(x.exam_code)}" data-to="${!x.is_open}">${x.is_open ? '다시 수집 열기' : '수집 닫고 분석 열기'}</button>
+         <button class="ghost" data-ebs="${esc(x.exam_code)}" ${Object.keys(x.keys ?? {}).length ? '' : 'disabled'}>EBS 다시 가져오기</button>`}</td></tr>`).join('');
+  $('statusTable').innerHTML = `<tr><th>회차</th>${gradeHeads}</tr>` + (data ?? []).map(x => `<tr><td>${name(x)}${x.opened ? '' : ' <span class="muted">(미개설)</span>'}</td>${gradeCells(x)}</tr>`).join('');
+  $('examTable').querySelectorAll('[data-open]').forEach(b => b.onclick = async () => {
+    const [year, month] = b.dataset.open.split('-').map(Number);
+    try {
+      const r = await api('/api/exams', { year, month });
+      say($('examMsgA'), `${r.exam_code} 회차 열림 · 정답표 ${pulledText(r.pulled, r.pull_error)}${r.ebs_started?.length ? ' · EBS 가져오는 중' : ''}`, r.pull_error ? 'warn' : true);
+      loadExams();
+    } catch (err) { say($('examMsgA'), err.message); }
+  });
+  $('keyExam').innerHTML = opened.map(x => `<option value="${esc(x.exam_code)}">${esc(x.exam_name)}</option>`).join('');
+  // 가져오는 중인 작업이 있으면 5초마다 새로고침
+  clearTimeout(examPoll);
+  if ((data ?? []).some(x => Object.values(x.ebs ?? {}).some(j => j.status === 'running'))) examPoll = setTimeout(loadExams, 5000);
+  $('examTable').querySelectorAll('[data-ebs]').forEach(b => b.onclick = async () => {
+    try {
+      const r = await api('/api/ebs/run', { exam_code: b.dataset.ebs });
+      say($('examMsgA'), r.started.length ? `${b.dataset.ebs} EBS 자료 가져오기 시작: ${r.started.map(g => g + '학년').join('·')}` : '이미 가져오는 중입니다', true);
+      loadExams();
+    } catch (err) { say($('examMsgA'), err.message); }
+  });
   $('examTable').querySelectorAll('[data-code]').forEach(b => b.onclick = async () => {
     const to = b.dataset.to === 'true';
-    if (to && !confirm('개방하면 새 제출이 막히고 정답·리포트가 열립니다. 모든 학교가 제출했나요?')) return;
-    try { await api('/api/exams/' + encodeURIComponent(b.dataset.code), { is_open: to }, 'PATCH'); loadExams(); }
-    catch (err) { alert(err.message); }
+    if (to && !confirm('수집을 닫으면 새 제출이 막히고 분석 리포트가 열립니다. 모든 학교가 제출했나요?')) return;
+    try {
+      const r = await api('/api/exams/' + encodeURIComponent(b.dataset.code), { is_open: to }, 'PATCH');
+      say($('examMsgA'), to ? `${b.dataset.code} 수집 닫음 · 정답표 다시 받음: ${pulledText(r.pulled, r.pull_error)}` : `${b.dataset.code} 다시 수집 중`, r.pull_error ? 'warn' : true);
+      loadExams();
+    } catch (err) { say($('examMsgA'), err.message); }
   });
+}
+{   // 연도 선택지: 작년~내년
+  const y = new Date().getFullYear();
+  $('eYear').innerHTML = [y - 1, y, y + 1].map(v => `<option value="${v}"${v === y ? ' selected' : ''}>${v}년</option>`).join('');
 }
 $('examForm').onsubmit = async e => {
   e.preventDefault();
   try {
-    await api('/api/exams', { exam_code: $('eCode').value.trim(), exam_name: $('eName').value.trim(),
-      exam_date: $('eDate').value || null });
-  } catch (err) { return alert(err.message); }
-  e.target.reset(); loadExams();
+    const r = await api('/api/exams', { year: +$('eYear').value, month: +$('eMonth').value, exam_date: $('eDate').value || null });
+    const ebs = r.ebs_started?.length ? ' · EBS 가져오는 중' : '';
+    say($('examMsgA'), `${r.exam_code} 회차 열림 · 정답표 ${pulledText(r.pulled, r.pull_error)}${ebs}`, r.pull_error ? 'warn' : true);
+  } catch (err) { return say($('examMsgA'), err.message); }
+  $('eDate').value = ''; loadExams();
 };
 
 // ── 정답표 ──────────────────────────────────────────
@@ -484,6 +554,15 @@ function validate(rows) {
     if (gaps.length) errors.push(`${key}: 문항번호 빠짐 ${gaps.join(', ')} (1~${max} 중)`);
   }
   return { errors, groups };
+}
+
+// 정답일람표 제목 "2026학년도 2학년 4회 10월 모의고사" → { exam_code: '2026-10', grade: 2 }
+function detectExam(sheet) {
+  for (const r of sheet.slice(0, 5)) {
+    const m = /(\d{4})\s*학년도\s*(\d)\s*학년.*?(\d{1,2})\s*월/.exec(String(r[0] ?? ''));
+    if (m) return { exam_code: `${m[1]}-${m[3].padStart(2, '0')}`, grade: +m[2] };
+  }
+  return null;
 }
 
 // 리딩 업체 정답일람표 파서.
@@ -520,13 +599,14 @@ function parseSheet(sheet, exam_code, grade) {
 
 async function upload(file) {
   say($('keyMsg'), '');
-  const exam_code = $('keyExam').value, grade = +$('keyGrade').value;
-  if (!exam_code) return say($('keyMsg'), '회차를 먼저 선택하세요.');
+  let exam_code = $('keyExam').value, grade = +$('keyGrade').value, detected = '';
 
   let rows;
   if (/\.xlsx?$/i.test(file.name)) {
     const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', raw: false });
     const sheet = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '', blankrows: false });
+    const t = detectExam(sheet);   // "2026학년도 2학년 4회 10월 모의고사" → 2026-10, 2학년
+    if (t) { exam_code = t.exam_code; grade = t.grade; detected = `파일 제목에서 ${exam_code} ${grade}학년으로 인식. `; }
     rows = parseSheet(sheet, exam_code, grade);
     if (!rows.length) return say($('keyMsg'), '정답일람표를 인식하지 못했습니다. 시트 첫 열에 "○○ 정답일람표"가 있는지 확인하세요.');
   } else {
@@ -534,6 +614,7 @@ async function upload(file) {
     rows = Papa.parse(text, { header: true, skipEmptyLines: true }).data.map(r => ({ grade, ...r }));   // CSV에 grade 열이 있으면 그것이 우선
   }
   if (!rows.length) return say($('keyMsg'), '빈 파일입니다.');
+  if (!exam_code) return say($('keyMsg'), '회차를 알 수 없습니다. 파일 제목에 "YYYY학년도 N학년 … M월"이 없으면 회차를 선택하세요.');
 
   const { errors, groups } = validate(rows);
   if (errors.length) return say($('keyMsg'), `${errors.length}건의 오류로 중단했습니다.\n\n` + errors.slice(0, 20).join('\n'));
@@ -542,7 +623,7 @@ async function upload(file) {
   rows.forEach(r => { const k = `${r.exam_code}/${r.grade}/${r.subject}`; pts[k] = (pts[k] ?? 0) + +r.points; });
   const summary = Object.entries(groups)
     .map(([k, v]) => `${k.split('/')[1]}학년 ${k.split('/')[2]} — ${v.length}문항, 배점 합계 ${pts[k]}점`).join('\n');
-  if (!confirm(`문항 수와 배점 합계가 정답표와 맞는지 확인하세요.\n같은 회차·학년·과목의 기존 정답표는 삭제됩니다.\n\n${summary}`)) return;
+  if (!confirm(`${detected}문항 수와 배점 합계가 정답표와 맞는지 확인하세요.\n같은 회차·학년·과목의 기존 정답표는 삭제됩니다.\n\n${summary}`)) return;
 
   const payload = rows.map(r => ({
     exam_code: r.exam_code, grade: +r.grade, subject: r.subject, q_no: +r.q_no,
@@ -550,12 +631,85 @@ async function upload(file) {
   }));
   try {
     const r = await api('/api/answer-keys', { rows: payload }, 'PUT');
-    const push = r.push_error ? `\n정답 DB 서버 전송 실패: ${r.push_error}`
-      : r.pushed == null ? '\n(정답 DB 서버 전송 생략 — 서비스 키 미설정)' : `\n정답 DB 서버에도 ${r.pushed}문항 전송`;
-    say($('keyMsg'), `${payload.length}문항 등록 완료 — ${summary}${push}`, r.push_error ? 'warn' : true);
-    loadBridge();
+    const push = r.push_error ? ` · 정답 DB 서버 전송 실패: ${r.push_error}` : r.pushed == null ? ' · 정답 DB 서버 전송 생략(키 없음)' : ' · 정답 DB 서버 전송';
+    const ebs = r.ebs_started?.length ? ' · EBS 가져오는 중 (위 현황에서 확인)' : '';
+    const who = [...new Set(payload.map(k => `${k.exam_code} ${k.grade}학년`))].join(', ');
+    const per = Object.entries(groups).map(([k, v]) => `${k.split('/')[2]} ${v.length}`).join('·');
+    say($('keyMsg'), `${who} 정답표 ${payload.length}문항 저장 (${per})${push}${ebs}`, r.push_error ? 'warn' : true);
+    loadExams();
   } catch (err) { say($('keyMsg'), err.message); }
 }
+
+// ── 통계자료(.xls) / 도수분포 CSV → 정답 DB 서버 freq_dist ──
+// 교육청 '전국연합학력평가 통계자료' 통째로: 표준점수누적도수(국수·탐구) 3행 + 영역별등급구분점수(점수·인원·비율)
+// → long 형식 (exam '2026_9', grade, subject, row_type, idx, value). 시행일·학년은 국수 시트 제목에서.
+function parseStats(wb) {
+  const pick = names => { const n = wb.SheetNames.find(x => names.some(k => x.replace(/\s/g, '') === k)); return n ? XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: '', blankrows: false }) : null; };
+  const num = v => { const t = String(v ?? '').replace(/,/g, '').trim(); const x = Number(t); return t !== '' && Number.isFinite(x) ? x : null; };
+  const gs = pick(['표준점수누적도수-국수', '표준점수누적도수-국어,수학']), tg = pick(['표준점수누적도수-탐구']), cut = pick(['영역별등급구분점수']);
+  if (!gs || !cut) return { error: '통계자료 시트(표준점수누적도수-국수, 영역별등급구분점수)를 찾지 못했습니다' };
+  const m = /(\d{4})\s*(?:학년도|년도)\s*(\d{1,2})월\s*고(\d)/.exec(String(gs[0]?.[0] ?? ''));   // "2026학년도 9월 고2" / "2026년도 …"
+  if (!m) return { error: '제목에서 시행일·학년을 찾지 못했습니다: ' + gs[0]?.[0] };
+  const exam = `${+m[1]}_${+m[2]}`, grade = +m[3], rows = [];
+  for (const [sheet, subjects] of [[gs, ['국어', '수학']], [tg, ['사회', '과학']]]) {
+    if (!sheet) continue;
+    [0, 3].forEach((ofs, i) => {
+      const hdr = sheet.slice(0, 10).findIndex(r => String(r[ofs] ?? '').trim() === '표준점수');
+      if (hdr < 0) return;
+      for (let r = hdr + 1, idx = 1; r < sheet.length && num(sheet[r][ofs]) != null; r++, idx++)
+        ['표준점수', '계', '누적(계)'].forEach((row_type, c) => rows.push({ exam, grade, subject: subjects[i], row_type, idx, value: num(sheet[r][ofs + c]) }));
+    });
+  }
+  const hdr = cut.slice(0, 10).findIndex(r => String(r[0] ?? '').trim() === '영역명');
+  for (const r of cut.slice(hdr + 1)) {
+    const subject = canonSubject(r[0]), g = num(r[1]);
+    if (!SUBJECTS.includes(subject) || g == null || g < 1 || g > 9) continue;
+    ['점수', '인원', '비율'].forEach((row_type, c) => rows.push({ exam, grade, subject, row_type, idx: g, value: num(r[2 + c]) }));
+  }
+  return { exam, grade, rows };
+}
+async function uploadFreq(file) {
+  say($('freqMsg'), '');
+  let rows, label = '';
+  if (/\.xlsx?$/i.test(file.name)) {
+    const p = parseStats(XLSX.read(await file.arrayBuffer(), { type: 'array', raw: false }));
+    if (p.error) return say($('freqMsg'), p.error);
+    rows = p.rows; label = `${p.exam} ${p.grade}학년 통계자료 → `;
+    const cnt = {}; rows.forEach(r => { cnt[r.subject] = (cnt[r.subject] ?? 0) + 1; });
+    if (!confirm(`${label}${rows.length}행 (${Object.entries(cnt).map(([k, v]) => k + ' ' + v).join(', ')})\n정답 DB 서버에 저장할까요? 같은 회차·학년 값은 덮어씁니다.`)) return;
+  } else {
+    const text = (await file.text()).replace(/^﻿/, '');
+    rows = Papa.parse(text, { header: true, skipEmptyLines: true }).data;
+    const missing = ['exam', 'grade', 'subject', 'row_type', 'idx', 'value'].filter(c => !(c in (rows[0] ?? {})));
+    if (missing.length) return say($('freqMsg'), '헤더 누락: ' + missing.join(', '));
+  }
+  try {
+    const r = await api('/api/freq-dist', { rows });
+    say($('freqMsg'), `${r.exams.join(', ')} 통계자료 ${r.n}행 저장`, true); loadExams();
+  } catch (err) { say($('freqMsg'), err.message); }
+}
+async function uploadDiff(file) {
+  say($('diffMsg'), '');
+  const text = (await file.text()).replace(/^\uFEFF/, '');
+  const rows = Papa.parse(text, { header: true, skipEmptyLines: true }).data;
+  const missing = ['exam', 'grade', 'subject', 'q_no', 'difficulty'].filter(c => !(c in (rows[0] ?? {})));
+  if (missing.length) return say($('diffMsg'), '헤더 누락: ' + missing.join(', '));
+  try {
+    const r = await api('/api/difficulty', { rows });
+    say($('diffMsg'), `${r.exams.join(', ')} 정답률 ${r.n}문항 저장`, true); loadExams();
+  } catch (err) { say($('diffMsg'), err.message); }
+}
+$('dDrop').onclick = () => $('dFile').click();
+$('dFile').onchange = e => e.target.files[0] && uploadDiff(e.target.files[0]);
+$('dDrop').ondragover = e => { e.preventDefault(); $('dDrop').classList.add('over'); };
+$('dDrop').ondragleave = () => $('dDrop').classList.remove('over');
+$('dDrop').ondrop = e => { e.preventDefault(); $('dDrop').classList.remove('over'); uploadDiff(e.dataTransfer.files[0]); };
+
+$('fDrop').onclick = () => $('fFile').click();
+$('fFile').onchange = e => e.target.files[0] && uploadFreq(e.target.files[0]);
+$('fDrop').ondragover = e => { e.preventDefault(); $('fDrop').classList.add('over'); };
+$('fDrop').ondragleave = () => $('fDrop').classList.remove('over');
+$('fDrop').ondrop = e => { e.preventDefault(); $('fDrop').classList.remove('over'); uploadFreq(e.dataTransfer.files[0]); };
 
 $('kDrop').onclick = () => $('kFile').click();
 $('kFile').onchange = e => e.target.files[0] && upload(e.target.files[0]);

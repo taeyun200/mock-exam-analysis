@@ -67,3 +67,15 @@ create table if not exists responses (
   primary key (submission_id, grade, class_no, student_no, q_no)
 ) without rowid;
 
+
+-- ── EBSi 자료 가져오기 작업 상태 (회차·학년별 1행). 결과 자체는 정답 DB 서버(Supabase)에 쓴다. ──
+create table if not exists ebs_jobs (
+  exam_code   text not null references exams(exam_code) on delete cascade,
+  grade       integer not null,
+  status      text not null check (status in ('running', 'done', 'error')),
+  started_at  text not null,
+  finished_at text,
+  summary     text,                        -- '오답률 90 · 등급컷 54 · 단원 190' 또는 오류 메시지
+  warnings    text,                        -- 미등록 분류·절대평가 컷 불일치 등, 줄바꿈 구분
+  primary key (exam_code, grade)
+);
