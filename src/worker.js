@@ -27,12 +27,17 @@ export default {
 const cookie = (v, maxAge) => `sid=${v}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
 const ID_RE = /^[A-Za-z0-9_-]{2,30}$/;   // 쿠키 구분자 '.'가 못 들어오게
 
-async function login(req, body, env) {
+// ID·비밀번호 확인 (시도 제한 포함)
+async function authenticate(req, env, id, pw) {
   const ip = req.headers.get('cf-connecting-ip') ?? 'local';
   if (env.LOGIN_LIMIT && !(await env.LOGIN_LIMIT.limit({ key: ip })).success) fail(429, '시도가 너무 많습니다. 1분 뒤에 다시 하세요.');
-  const id = String(body?.login_id ?? ''), pw = String(body?.password ?? '');
   const acct = ID_RE.test(id) ? await env.DB.prepare('select login_id, password_hash from accounts where login_id = ?').bind(id).first() : null;
   if (!await verifyPassword(pw, acct?.password_hash)) fail(401, 'ID 또는 비밀번호가 맞지 않습니다');
+  return id;
+}
+
+async function login(req, body, env) {
+  const id = await authenticate(req, env, String(body?.login_id ?? ''), String(body?.password ?? ''));
   const exp = Math.floor(Date.now() / 1000) + SESSION_SEC;
   const sid = `${id}.${exp}.${await sign(env.SESSION_SECRET, `${id}.${exp}`)}`;
   return Response.json({ ok: true }, { headers: { 'set-cookie': cookie(sid, SESSION_SEC) } });
@@ -58,6 +63,7 @@ async function route(method, url, body, me, env) {
   const r = `${method} ${path}`;
 
   if (r === 'GET /me') return me;
+  if (path.startsWith('/bridge/')) { admin(); return bridge(method, path.slice(7), body, env); }   // 정답 DB 서버(엑셀 공용)
 
   if (r === 'GET /schools') return rows('select * from schools order by school_code');
   if (r === 'POST /schools') {
@@ -105,7 +111,9 @@ async function route(method, url, body, me, env) {
       stmts.push(env.DB.prepare(`insert into answer_keys (exam_code, grade, subject, q_no, answer, points, q_type, unit) values ${vals(chunk.length, 8)}`)
         .bind(...chunk.flatMap(k => [k.exam_code, k.grade, k.subject, k.q_no, k.answer, k.points, k.q_type, k.unit])));
     await env.DB.batch(stmts);
-    return { n: keys.length };
+    let pushed = null, push_error = null;   // 정답 DB 서버(엑셀 공용)에도 보낸다. 실패해도 우리 저장은 유지된다.
+    try { pushed = await pushOfficial(keys, env); } catch (e) { push_error = e.message; }
+    return { n: keys.length, pushed, push_error };
   }
 
   // 계정: 학교 하나에 ID 하나. 비밀번호를 비우면 학교·권한만 바꾼다 (재설정은 새 비밀번호를 넣는다).
@@ -197,10 +205,81 @@ async function submit(body, me, env, exam) {
   return created;
 }
 
+// ── 정답 DB 서버(Supabase, 엑셀 '학평 분석 시스템'과 공용) 다리 ──────────────
+// 엑셀(M_자료수신.bas)은 그 서버를 그대로 읽는다. 여기서는 그 서버의 official_items를 가져오고(pull),
+// 운영자가 여기 올린 정답표를 그쪽에도 보낸다(push). 두 쪽 정답표가 같게 유지된다.
+// 회차 코드: 우리 '2026-09' ↔ 그쪽 '2026_9'. 정답 표기: 우리 '1' / '1|3' / '047' ↔ 그쪽 '①' / '①,③' / '047'.
+export const toExcelExam = c => { const m = /^(\d{4})-(\d{2})$/.exec(c); return m ? `${m[1]}_${+m[2]}` : c; };
+export const fromExcelExam = c => { const m = /^(\d{4})_(\d{1,2})$/.exec(String(c)); return m ? `${m[1]}-${m[2].padStart(2, '0')}` : fail(400, `회차 형식은 YYYY_M: ${c}`); };
+const CIRCLED = '①②③④⑤';
+export const toOfficialAnswer = (answer, q_type) =>
+  q_type === 'MC' && answer !== '*' ? String(answer).split('|').map(a => CIRCLED[+a - 1] ?? a).join(',') : String(answer);
+// 그쪽 행 → 우리 answer_keys 행. 유형: q_type이 있으면 그대로, 없으면 ①~⑤ 표기 = 객관식, 숫자 문자열 = 단답형.
+export function fromOfficial(r) {
+  const raw = String(r.answer ?? '').replace(/\s/g, '');
+  const parts = raw.replace(/[①②③④⑤]/g, c => CIRCLED.indexOf(c) + 1).split(/[,|/]/).filter(Boolean);
+  if (!parts.length) fail(400, `정답 비어 있음: ${r.subject} ${r.q_no}`);
+  const mc = ['MC', 'SA'].includes(r.q_type) ? r.q_type === 'MC' : /[①②③④⑤]/.test(raw);
+  return { exam_code: fromExcelExam(r.exam), grade: grade(r.grade), subject: subject(r.subject), q_no: int(r.q_no),
+    answer: parts.join('|'), points: +r.points > 0 ? +r.points : fail(400, `배점 잘못됨: ${r.subject} ${r.q_no}`), q_type: mc ? 'MC' : 'SA' };
+}
+
+// PostgREST 호출. 읽기는 anon 키(공개용), 쓰기는 SUPABASE_SERVICE_KEY 비밀(없으면 push 생략).
+async function sb(env, path, init = {}, key = env.SUPABASE_ANON_KEY) {
+  if (!env.SUPABASE_URL || !key) fail(500, '정답 DB 서버 접속 정보가 설정되지 않았습니다 (wrangler.jsonc vars)');
+  const r = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, { ...init,
+    // Supabase는 브라우저 User-Agent로 오는 secret key 요청을 거부한다 → 스크립트 UA를 명시
+    headers: { apikey: key, Authorization: `Bearer ${key}`, 'content-type': 'application/json', 'user-agent': 'mock-exam-worker', ...(init.headers ?? {}) } });
+  if (!r.ok) fail(502, `정답 DB 서버 응답 ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  const t = await r.text();
+  return t ? JSON.parse(t) : null;   // 쓰기 응답(201)은 본문이 비어 있다
+}
+async function sbAll(env, path) {   // PostgREST는 요청당 최대 1,000행 → 끝까지 받는다
+  const out = [];
+  for (let off = 0; ; off += 1000) {
+    const page = await sb(env, `${path}&limit=1000&offset=${off}`);
+    out.push(...page);
+    if (page.length < 1000) return out;
+  }
+}
+
+async function bridge(method, path, body, env) {
+  const r = `${method} ${path}`;
+  if (r === 'GET /status') {   // 그쪽에 어떤 회차·학년 정답표가 몇 문항 있는지
+    const rows = await sbAll(env, 'official_items?select=exam,grade&order=exam,grade,subject,q_no');
+    const m = new Map();
+    for (const x of rows) { const k = `${x.exam}|${x.grade}`; m.set(k, (m.get(k) ?? 0) + 1); }
+    return [...m].map(([k, n]) => ({ exam: k.split('|')[0], grade: +k.split('|')[1], n }))
+      .sort((a, b) => fromExcelExam(b.exam).localeCompare(fromExcelExam(a.exam)) || a.grade - b.grade);
+  }
+  if (r === 'POST /pull') {   // 그쪽 정답표 → 우리 answer_keys (같은 키는 덮어쓴다, 회차는 없으면 만든다)
+    const exam = String(body.exam), g = grade(body.grade);
+    const rows = await sbAll(env, `official_items?select=exam,grade,subject,q_no,answer,points,q_type&exam=eq.${encodeURIComponent(exam)}&grade=eq.${g}&order=subject,q_no`);
+    if (!rows.length) fail(404, `정답 DB 서버에 ${exam} ${g}학년 정답표가 없습니다`);
+    const keys = rows.map(fromOfficial), exam_code = keys[0].exam_code;
+    const stmts = [env.DB.prepare('insert or ignore into exams (exam_code, exam_name) values (?, ?)').bind(exam_code, `${exam_code.slice(0, 4)}년 ${+exam_code.slice(5)}월 학평`)];
+    for (const k of keys) stmts.push(env.DB.prepare(`insert into answer_keys (exam_code, grade, subject, q_no, answer, points, q_type) values (?, ?, ?, ?, ?, ?, ?)
+      on conflict (exam_code, grade, subject, q_no) do update set answer = excluded.answer, points = excluded.points, q_type = excluded.q_type`)
+      .bind(k.exam_code, k.grade, k.subject, k.q_no, k.answer, k.points, k.q_type));
+    for (const c of chunks(stmts, 500)) await env.DB.batch(c);
+    return { exam: toExcelExam(exam_code), grade: g, n: keys.length };
+  }
+  fail(404, '없는 API입니다: ' + r);
+}
+
+// 우리 정답표 → 그쪽 official_items (같은 키는 덮어쓴다). 서비스 키가 없으면 null을 돌려주고 넘어간다.
+async function pushOfficial(keys, env) {
+  if (!env.SUPABASE_SERVICE_KEY) return null;
+  const rows = keys.map(k => ({ exam: toExcelExam(k.exam_code), grade: k.grade, subject: k.subject, q_no: k.q_no,
+    answer: toOfficialAnswer(k.answer, k.q_type), points: k.points }));
+  await sb(env, 'official_items', { method: 'POST', body: JSON.stringify(rows), headers: { Prefer: 'resolution=merge-duplicates' } }, env.SUPABASE_SERVICE_KEY);
+  return rows.length;
+}
+
 // ── 입력 검증 ───────────────────────────────────────
-const str = (v, max) => typeof v === 'string' && v.length > 0 && v.length <= max ? v : fail(400, `잘못된 값: ${JSON.stringify(v)}`);
-const int = v => Number.isInteger(+v) ? +v : fail(400, `정수가 아님: ${JSON.stringify(v)}`);
-const subject = v => SUBJECTS.includes(v) ? v : fail(400, `알 수 없는 과목: ${v}`);
-const grade = v => [1, 2, 3].includes(+v) ? +v : fail(400, `학년은 1~3이어야 합니다: ${v}`);
+export const str = (v, max) => typeof v === 'string' && v.length > 0 && v.length <= max ? v : fail(400, `잘못된 값: ${JSON.stringify(v)}`);
+export const int = v => Number.isInteger(+v) ? +v : fail(400, `정수가 아님: ${JSON.stringify(v)}`);
+export const subject = v => SUBJECTS.includes(v) ? v : fail(400, `알 수 없는 과목: ${v}`);
+export const grade = v => [1, 2, 3].includes(+v) ? +v : fail(400, `학년은 1~3이어야 합니다: ${v}`);
 const chunks = (a, n) => Array.from({ length: Math.ceil(a.length / n) }, (_, i) => a.slice(i * n, i * n + n));
 const vals = (rows, cols) => Array(rows).fill(`(${Array(cols).fill('?').join(',')})`).join(',');

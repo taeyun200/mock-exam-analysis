@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "test": "node test_validate.js && node test_parse.js && node test_stats.js && node test_scoring.js"
+    "test": "node test_validate.js && node test_parse.js && node test_stats.js && node test_bridge.js && node test_scoring.js"
   },
   "devDependencies": {
     "xlsx": "^0.18.5"

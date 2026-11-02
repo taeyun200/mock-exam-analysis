@@ -7,6 +7,12 @@
   "d1_databases": [
     { "binding": "DB", "database_name": "mock-exam", "database_id": "84fa3deb-63b0-4757-abca-46b2b6e4411a" }
   ],
+  // 정답 DB 서버(Supabase, 엑셀 '학평 분석 시스템'과 공용). anon 키는 읽기 전용 공개 키.
+  // 쓰기(정답표 push)는 비밀 SUPABASE_SERVICE_KEY: wrangler secret put SUPABASE_SERVICE_KEY (로컬은 .dev.vars)
+  "vars": {
+    "SUPABASE_URL": "https://wephkadspmhmagicpzzw.supabase.co",
+    "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndlcGhrYWRzcG1obWFnaWNwenp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkzMTgyNjYsImV4cCI6MjEwNDg5NDI2Nn0.2augmTQv71bQceuv7lMcSi_MT4Q6fCpjk0LYhaSOo70"
+  },
   // 로그인 시도 제한: IP당 1분에 10회
   "ratelimits": [
     { "name": "LOGIN_LIMIT", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }

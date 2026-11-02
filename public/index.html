@@ -299,6 +299,12 @@
       <div id="kDrop">정답표 파일을 여기에 끌어다 놓거나 클릭해서 선택</div>
       <input type="file" id="kFile" accept=".xls,.xlsx,.csv" hidden>
       <div id="keyMsg"></div>
+
+      <h2 style="margin-top:22px">정답 DB 서버 (엑셀 학평 분석과 공용)</h2>
+      <p class="muted">엑셀 '자료 받기'가 읽는 서버에 있는 정답표입니다. 가져오면 이 서버의 같은 회차·학년 정답표를 덮어씁니다.
+        위에서 정답표를 올리면 그 서버에도 자동으로 보냅니다.</p>
+      <div id="bridgeMsg"></div>
+      <table id="bridgeTable"></table>
   </section>
 
   <section class="view card" id="v-accounts" hidden>
@@ -388,7 +394,24 @@ $('sbBackdrop').onclick = () => document.body.classList.remove('sb-open');
 // ════════════════════════════════════════════════════
 // 관리 (운영자)
 // ════════════════════════════════════════════════════
-async function loadAll() { await Promise.all([loadSchools(), loadExams(), loadAccounts()]); }
+async function loadAll() { await Promise.all([loadSchools(), loadExams(), loadAccounts(), loadBridge()]); }
+
+// ── 정답 DB 서버 다리 ───────────────────────────────
+async function loadBridge() {
+  let rows;
+  try { rows = await api('/api/bridge/status'); } catch (err) { return say($('bridgeMsg'), '정답 DB 서버 조회 실패: ' + err.message); }
+  $('bridgeTable').innerHTML = '<tr><th>회차</th><th>학년</th><th>문항 수</th><th></th></tr>' +
+    rows.map(r => `<tr><td>${esc(r.exam)}</td><td>${r.grade}학년</td><td>${r.n}</td>
+      <td><button class="ghost" data-pull="${esc(r.exam)}|${r.grade}">가져오기</button></td></tr>`).join('');
+  $('bridgeTable').querySelectorAll('[data-pull]').forEach(b => b.onclick = async () => {
+    const [exam, grade] = b.dataset.pull.split('|');
+    if (!confirm(`${exam} ${grade}학년 정답표를 정답 DB 서버에서 가져와 이 서버의 정답표를 덮어쓸까요?`)) return;
+    try {
+      const r = await api('/api/bridge/pull', { exam, grade: +grade });
+      say($('bridgeMsg'), `${r.exam} ${r.grade}학년 ${r.n}문항 가져옴`, true); loadExams();
+    } catch (err) { say($('bridgeMsg'), err.message); }
+  });
+}
 
 // ── 학교 ────────────────────────────────────────────
 async function loadSchools() {
@@ -525,8 +548,13 @@ async function upload(file) {
     exam_code: r.exam_code, grade: +r.grade, subject: r.subject, q_no: +r.q_no,
     answer: String(r.answer).trim(), points: +r.points, q_type: r.q_type, unit: r.unit || null
   }));
-  try { await api('/api/answer-keys', { rows: payload }, 'PUT'); say($('keyMsg'), `${payload.length}문항 등록 완료 — ${summary}`, true); }
-  catch (err) { say($('keyMsg'), err.message); }
+  try {
+    const r = await api('/api/answer-keys', { rows: payload }, 'PUT');
+    const push = r.push_error ? `\n정답 DB 서버 전송 실패: ${r.push_error}`
+      : r.pushed == null ? '\n(정답 DB 서버 전송 생략 — 서비스 키 미설정)' : `\n정답 DB 서버에도 ${r.pushed}문항 전송`;
+    say($('keyMsg'), `${payload.length}문항 등록 완료 — ${summary}${push}`, r.push_error ? 'warn' : true);
+    loadBridge();
+  } catch (err) { say($('keyMsg'), err.message); }
 }
 
 $('kDrop').onclick = () => $('kFile').click();

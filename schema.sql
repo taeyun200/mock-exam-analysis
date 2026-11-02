@@ -66,3 +66,4 @@ create table if not exists responses (
   marked        text,                      -- NULL/'' = 무응답
   primary key (submission_id, grade, class_no, student_no, q_no)
 ) without rowid;
+
