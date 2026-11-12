@@ -14,7 +14,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="repla
 COLS, PAD, MARGIN_TOL, HEADER_Y = ((73, 417), (425, 772)), 6, 3, 165  # 단 x범위(경계선 x=421 제외), 머리글("N 국어 영역" 띠) 아래부터 본문
 RE_SET = re.compile(r"^\[(\d+)\s*[~～∼]\s*(\d+)\]")
 RE_Q = re.compile(r"^(\d{1,2})\.\s")
-RE_END = re.compile(r"^[※*\s]*확인\s*사항")  # 마지막 쪽 안내문: 여기서 끝
+RE_END = re.compile(r"^[※*\s]*확인\s*사항|^(단답형|주관식|서답형)\s*$")  # 마지막 쪽 안내문·수학 "단답형" 구분 제목: 직전 문항을 여기서 끊음
 
 
 def columns(page):
