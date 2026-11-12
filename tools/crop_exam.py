@@ -74,7 +74,7 @@ def crop(pdf, outdir, zoom=2.5):
     m = re.search(r"(\d{4})학년도\s*(\d{1,2})월\s*고(\d)\s*전국연합학력평가", head)
     subj = re.search(r"(\S+)\s*영역", head)
     title = (m[0] + " " + subj[0]) if m and subj else head.split("\n")[0]
-    exam = {"year": int(m[1]), "month": int(m[2]), "grade": int(m[3]), "subject": subj[1] if subj else None} if m else {"title": title}
+    exam = {"year": int(m[1]), "month": int(m[2]), "grade": int(m[3]), "subject": {"사회탐구": "사회", "과학탐구": "과학"}.get(subj[1], subj[1]) if subj else None} if m else {"title": title}
 
     # 1) 읽는 순서대로 조각 생성: 현재 열린 세그먼트에 (page, rect) 덧붙이기
     segments, cur, expect_q = [], None, [1]
