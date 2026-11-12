@@ -70,7 +70,9 @@ def build(folder, wrong, answers=None, mine=None, out=None, sid="", name=""):
 
 
 def kv(s):
-    return {int(k): v for k, v in (x.split("=") for x in s.split(","))} if s else {}
+    """"4=2,10=4" → {4:'②',10:'④'} (숫자는 동그라미 숫자로, 콘솔 인코딩 문제 회피)"""
+    circ = {str(i + 1): c for i, c in enumerate("①②③④⑤")}
+    return {int(k): circ.get(v, v) for k, v in (x.split("=") for x in s.split(","))} if s else {}
 
 
 if __name__ == "__main__":
