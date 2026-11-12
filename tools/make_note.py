@@ -48,7 +48,7 @@ def build(folder, wrong, answers=None, mine=None, out=None, sid="", name=""):
     title = f"{e['year']}학년도 {e['month']}월 고{e['grade']} 전국연합학력평가 {e['subject']}" if "year" in e else e.get("title", "")
     qs = {q["no"]: q for q in mf["questions"]}
     ps = {p["range"]: p for p in mf["passages"]}
-    answers, mine = answers or {}, mine or {}
+    answers, mine = answers or {q['no']: q['answer'] for q in mf['questions'] if 'answer' in q}, mine or {}  # 정답은 manifest(해설지 파싱)에서
     rows, cards, shown = [], [], {}  # 지문범위 → 처음 보인 문항 번호
     for no in wrong:
         q = qs[no]
