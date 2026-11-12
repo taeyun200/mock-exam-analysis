@@ -644,9 +644,10 @@ async function upload(file) {
 // 교육청 '전국연합학력평가 통계자료' 통째로: 표준점수누적도수(국수·탐구) 3행 + 영역별등급구분점수(점수·인원·비율)
 // → long 형식 (exam '2026_9', grade, subject, row_type, idx, value). 시행일·학년은 국수 시트 제목에서.
 function parseStats(wb) {
-  const pick = names => { const n = wb.SheetNames.find(x => names.some(k => x.replace(/\s/g, '') === k)); return n ? XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: '', blankrows: false }) : null; };
+  // 시트 이름이 회차마다 조금씩 다르다('영역별등급구분점수' / '영역(과목)별등급구분점수', '-국수' / '-국어,수학'). 핵심어로 찾는다.
+  const pick = keys => { const n = wb.SheetNames.find(x => { const t = x.replace(/\s/g, ''); return keys.every(k => t.includes(k)); }); return n ? XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: '', blankrows: false }) : null; };
   const num = v => { const t = String(v ?? '').replace(/,/g, '').trim(); const x = Number(t); return t !== '' && Number.isFinite(x) ? x : null; };
-  const gs = pick(['표준점수누적도수-국수', '표준점수누적도수-국어,수학']), tg = pick(['표준점수누적도수-탐구']), cut = pick(['영역별등급구분점수']);
+  const gs = pick(['누적도수', '국']), tg = pick(['누적도수', '탐구']), cut = pick(['등급구분점수']);   // 탐구 도수 시트는 없을 수도 있다(고1 3월)
   if (!gs || !cut) return { error: '통계자료 시트(표준점수누적도수-국수, 영역별등급구분점수)를 찾지 못했습니다' };
   const m = /(\d{4})\s*(?:학년도|년도)\s*(\d{1,2})월\s*고(\d)/.exec(String(gs[0]?.[0] ?? ''));   // "2026학년도 9월 고2" / "2026년도 …"
   if (!m) return { error: '제목에서 시행일·학년을 찾지 못했습니다: ' + gs[0]?.[0] };
@@ -660,11 +661,15 @@ function parseStats(wb) {
         ['표준점수', '계', '누적(계)'].forEach((row_type, c) => rows.push({ exam, grade, subject: subjects[i], row_type, idx, value: num(sheet[r][ofs + c]) }));
     });
   }
-  const hdr = cut.slice(0, 10).findIndex(r => String(r[0] ?? '').trim() === '영역명');
+  // 등급구분점수 표: 열 이름으로 위치를 찾는다. 고1 3월엔 '선택과목' 열이 있고 탐구가 (영역명 '탐구', 선택과목 '사회'/'과학')로 온다.
+  const hdr = cut.slice(0, 10).findIndex(r => r.some(c => String(c).trim() === '등급') && r.some(c => String(c).includes('영역')));
+  if (hdr < 0) return { error: '등급구분점수 표의 머리글(영역명·등급·점수)을 찾지 못했습니다' };
+  const H = cut[hdr].map(c => String(c).replace(/\s/g, '')), col = k => H.indexOf(k);
+  const ci = { sel: col('선택과목'), g: col('등급'), v: ['점수', '인원', '비율'].map(col) };
   for (const r of cut.slice(hdr + 1)) {
-    const subject = canonSubject(r[0]), g = num(r[1]);
+    const subject = canonSubject(ci.sel >= 0 && String(r[ci.sel] ?? '').trim() ? r[ci.sel] : r[0]), g = num(r[ci.g]);
     if (!SUBJECTS.includes(subject) || g == null || g < 1 || g > 9) continue;
-    ['점수', '인원', '비율'].forEach((row_type, c) => rows.push({ exam, grade, subject, row_type, idx: g, value: num(r[2 + c]) }));
+    ['점수', '인원', '비율'].forEach((row_type, c) => rows.push({ exam, grade, subject, row_type, idx: g, value: num(r[ci.v[c]]) }));
   }
   return { exam, grade, rows };
 }
