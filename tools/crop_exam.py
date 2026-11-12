@@ -10,7 +10,7 @@
 import json, re, sys, io
 import pymupdf
 
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 COLS, PAD, MARGIN_TOL, HEADER_Y = ((73, 417), (425, 772)), 6, 3, 165  # 단 x범위(경계선 x=421 제외), 머리글("N 국어 영역" 띠) 아래부터 본문
 RE_SET = re.compile(r"^\[(\d+)\s*[~～∼]\s*(\d+)\]")
 RE_Q = re.compile(r"^(\d{1,2})\.\s")
@@ -94,11 +94,12 @@ def crop(pdf, outdir, zoom=2.5):
     # 2) 렌더링
     mat, manifest, cur_set = pymupdf.Matrix(zoom, zoom), {"exam": exam, "passages": [], "questions": []}, None
     for seg in segments:
-        files = []
+        files, text = [], ""
         for pno, rect in seg["pieces"]:
             t = tight(doc[pno], rect)
             if not t or t.height < 12:
                 continue
+            text += doc[pno].get_text(clip=t)
             name = (f"set{seg['label']}" if seg["kind"] == "set" else f"q{seg['label']:02d}") + (f"_{len(files) + 1}" if files else "") + ".png"
             doc[pno].get_pixmap(matrix=mat, clip=t).save(os.path.join(outdir, name))
             files.append(name)
@@ -107,7 +108,9 @@ def crop(pdf, outdir, zoom=2.5):
             manifest["passages"].append({"range": cur_set, "images": files})
         else:
             lo, hi = map(int, cur_set.split("-")) if cur_set else (0, -1)
-            manifest["questions"].append({"no": seg["label"], "passage": cur_set if lo <= seg["label"] <= hi else None, "images": files})
+            pts = re.search(r"\[(\d(?:\.\d)?)점\]", text)  # 배점 표시 없으면 2점(국어·영어·한국사 기본)
+            manifest["questions"].append({"no": seg["label"], "passage": cur_set if lo <= seg["label"] <= hi else None, "images": files,
+                                          "points": float(pts[1]) if pts else 2, "text": " ".join(text.split())[:120]})
     json.dump(manifest, open(os.path.join(outdir, "manifest.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 
     # 3) 검수용 미리보기
