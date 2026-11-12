@@ -250,9 +250,17 @@ async function route(method, url, body, me, env, ctx) {
     const scored = score(raw, keys);
     const mine = scored.filter(c => c.school_code === me.school_code);
     const subs = [...new Set(scored.map(c => c.subject))];
+    // 문항 분류(영역·단원, EBSi)와 전국 정답률 등급(A~E, 성적통지표)은 정답 DB 서버에서 — 없으면 null로 둔다
+    const ex = encodeURIComponent(toExcelExam(x.exam_code));
+    const [units, nat] = await Promise.all([
+      sbAll(env, `item_units?select=subject,q_no,unit,area&exam=eq.${ex}&grade=eq.${g}`).catch(() => []),
+      sbAll(env, `official_items?select=subject,q_no,difficulty&exam=eq.${ex}&grade=eq.${g}&difficulty=not.is.null`).catch(() => []),
+    ]);
+    const U = new Map(units.map(u => [`${subject(u.subject)}|${u.q_no}`, u])), N = new Map(nat.map(n => [`${subject(n.subject)}|${n.q_no}`, n.difficulty]));
     return {
       summary: schoolSummary(scored, me.school_code),
-      items: itemStats(scored, me.school_code),
+      items: itemStats(scored, me.school_code).map(i => ({ ...i, area: U.get(`${i.subject}|${i.q_no}`)?.area ?? null,
+        unit: U.get(`${i.subject}|${i.q_no}`)?.unit ?? i.unit ?? null, nat: N.get(`${i.subject}|${i.q_no}`) ?? null })),
       dists: Object.fromEntries(subs.map(s => [s, distractors(scored, s)])),
       scores: studentScores(mine).map(({ student_key, school_code, ...s }) => s),
       marks: mine.map(c => ({ subject: c.subject, grade: c.grade, class_no: c.class_no, student_no: c.student_no, q_no: c.q_no, marked: c.marked, is_correct: c.is_correct })),
