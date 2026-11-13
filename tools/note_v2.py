@@ -37,7 +37,9 @@ table{border-collapse:collapse;width:100%} th,td{border:1px solid #cbd5e1;paddin
 .psg .pieces{display:flex;gap:4mm;align-items:flex-start} .psg img{width:91mm;max-height:248mm;object-fit:contain;object-position:top left;display:block}
 .hd{background:#1e3a5f;color:#fff;padding:5px 9px;display:flex;gap:10px;align-items:center;font-size:12.5px;border-radius:4px}
 .hd .tag{opacity:.85;font-weight:normal;font-size:11px} .hd .ans{margin-left:auto;font-size:11.5px} .hd b{background:#fff;color:#1e3a5f;border-radius:10px;padding:0 7px;margin-left:3px}
-.qimg{margin:5px 0 4px;text-align:left} .qimg img{max-width:100%;max-height:112mm;object-fit:contain;object-position:top left;display:block}
+.top{display:flex;gap:4mm;margin:5px 0 3px;min-height:92mm;align-items:stretch}
+.top .qimg{width:101mm;flex:none} .top .qimg img{width:101mm;max-height:128mm;object-fit:contain;object-position:top left;display:block}   /* 문항은 항상 같은 배율(원본 단 폭=101mm). 아주 긴 문항만 128mm에서 축소 */
+.top .box{flex:1}
 .sec{font-weight:700;color:#1e3a5f;font-size:12px;margin:5px 0 3px} .sec small{font-weight:normal;color:#6b7280;margin-left:6px}
 table.ch td{height:9mm;vertical-align:middle} table.ch td.w{text-align:left} table.ch .me{background:#fdecec} table.ch .ok{background:#e8f5ec;font-weight:700}
 .conf{font-size:12px;margin:4px 0 2px} .conf span{display:inline-block;margin-right:14px}
@@ -89,11 +91,10 @@ def build(folder, wrong, mine=None, sid="", name="", out=None, units=None):
         cause = "".join(f"<li>□ {i + 1}. {html.escape(t)}</li>" for i, t in enumerate(tags_of(no)))
         return (f"<div class=pg><div class=hd>{no}번 <span class=tag>{num(q.get('points'))}점 · {meta}{nat}</span>{psg}"
                 f"<span class=ans>내 답<b>{my or '&nbsp;'}</b> 정답<b>{ans or '&nbsp;'}</b></span></div>"
-                f"<div class=qimg>{imgs}</div>{choices}"
+                f"<div class=top><div class=qimg>{imgs}</div><div class=box><div class=t>해설 정리<small>해설지를 읽고 핵심 근거·개념을 내 말로</small></div><div class=lines>{'<i></i>' * 12}</div></div></div>{choices}"
                 f"<div class=conf><b style='color:#1e3a5f'>그때 확신도</b> &nbsp;<span>○ 확신</span><span>○ 반반</span><span>○ 찍음</span></div>"
                 f"<div class=sec>원인 유형 <small>해당 번호에 ✓ (2개까지) · 표지의 '원인 번호' 칸에 옮겨 적기</small></div><ol class=cause>{cause}</ol>"
-                f"<div class=boxes><div class=box><div class=t>해설 정리<small>해설지를 읽고 핵심 근거·개념을 내 말로</small></div><div class=lines>{'<i></i>' * 7}</div></div>"
-                f"<div class=box><div class=t>EBS 오답 강의 정리<small>강의에서 짚은 포인트·내가 몰랐던 것</small></div><div class=lines>{'<i></i>' * 7}</div></div></div></div>")
+                f"<div class=boxes><div class=box><div class=t>EBS 오답 강의 정리<small>강의에서 짚은 포인트·내가 몰랐던 것</small></div><div class=lines>{'<i></i>' * 6}</div></div></div></div>")
 
     body, done = [], set()
     for no in wrong:
