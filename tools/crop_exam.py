@@ -22,7 +22,7 @@ SUBJECTS = ("국어", "수학", "영어", "한국사", "사회", "과학")
 
 
 def lines(page):
-    """텍스트 줄 목록 [(x0, y0, x1, y1, text)] — 블록이 합쳐져도 줄 단위로 마커를 잡기 위해."""
+    """텍스트 줄 목록 [(x0, y0, x1, y1, text)] — 블록이 합쳐져도 줄 단위로 마커를 잡기 위해. 글자 크기는 BIG 에 따로 모은다."""
     out = []
     for b in page.get_text("dict")["blocks"]:
         for l in b.get("lines", []):
@@ -30,7 +30,11 @@ def lines(page):
             if t.strip():
                 x0, y0, x1, y1 = l["bbox"]
                 out.append((x0, y0, x1, y1, t))
+                if max(s["size"] for s in l["spans"]) >= 18: BIG.add((round(x0, 1), round(y0, 1)))
     return sorted(out, key=lambda l: (l[1], l[0]))
+
+
+BIG = set()   # 큰 글자 줄(머리글 띠의 "국어 영역"·쪽번호 "7"): 위치로 기억해 frame 에서 머리글로 친다
 
 
 def frame(page, ls, x0=None, x1=None):
@@ -39,7 +43,8 @@ def frame(page, ls, x0=None, x1=None):
     foot = min((l[1] for l in ls if l[1] > H * 0.85 and RE_PAGENO.match(l[4].strip())), default=H * 0.93)
     col = [l for l in ls if x0 is None or x0 <= l[0] < x1]
     # 머리글: 위쪽 15% 안의 제목·"N 국어 영역" 띠·교시·쪽번호(표 안 숫자가 걸리지 않게 쪽번호는 위 8%만)
-    head = max((l[3] for l in col if (l[3] < H * 0.15 and RE_HEAD.search(l[4].strip())) or (l[3] < H * 0.08 and RE_PAGENO.match(l[4].strip()))), default=0)
+    head = max((l[3] for l in col if l[3] < H * 0.2 and (RE_HEAD.search(l[4].strip()) or (l[3] < H * 0.08 and RE_PAGENO.match(l[4].strip()))
+                or ((round(l[0], 1), round(l[1], 1)) in BIG and RE_PAGENO.match(l[4].strip())))), default=0)   # 큰 글자 쪽번호(홀수 쪽 오른쪽 위 "7")도 머리글
     return head + 1, foot - 1
 
 
@@ -97,7 +102,8 @@ def tight(page, rect):
     """rect 안의 실제 내용 테두리(글자·그림·선)만 남기고 여백 제거."""
     r = pymupdf.Rect()
     for b in page.get_text("blocks", clip=rect):
-        r |= pymupdf.Rect(b[:4])
+        if rect.y0 <= (b[1] + b[3]) / 2 <= rect.y1:   # 세로 중심이 조각 안에 있는 블록만(경계에 걸친 머리글·쪽번호 제외)
+            r |= pymupdf.Rect(b[:4])
     for d in page.get_drawings():
         if d["rect"].intersects(rect) and d["rect"].width < rect.width * 1.2:
             r |= d["rect"] & rect
