@@ -118,7 +118,10 @@ def build(folder, wrong, mine=None, sid="", name="", out=None, units=None):
             "<h2>4. 다음 시험까지 바꿀 것 두 가지</h2><div class=box>1)<br><br>2)</div></div>")
     page = (f"<!doctype html><html lang=ko><meta charset=utf-8><title>{title} 오답노트</title><style>{CSS}</style><body>"
             f"<div class=noprint><button onclick=print()>🖨 인쇄 / PDF 저장</button></div>{cover}{''.join(body)}{wrap}</body></html>")
-    out = out or os.path.join(folder, f"오답노트v2_{sid or '샘플'}.html")
+    out = out or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(folder))) if os.path.basename(os.path.dirname(os.path.abspath(folder))) == "오답노트_크롭" else os.path.dirname(os.path.abspath(folder)), "오답노트_샘플", f"{os.path.basename(os.path.normpath(folder))}_{sid or '샘플'}.html")
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    rel = os.path.relpath(os.path.abspath(folder), os.path.dirname(os.path.abspath(out))).replace("\\", "/")   # 그림은 크롭 폴더에 그대로, HTML 만 샘플 폴더로
+    page = page.replace('src="', f'src="{rel}/')
     open(out, "w", encoding="utf-8").write(page)
     return out
 

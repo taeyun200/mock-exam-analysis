@@ -64,8 +64,11 @@ def build(folder, wrong, answers=None, mine=None, out=None, sid="", name=""):
                 psg = f'<div class=psg><div class=lbl>지문 [{q["passage"]}]</div><div class=pieces>{imgs}</div></div>'
         more = "".join(f'<img class=qi src="{f}">' for f in q["images"][1:])
         cards.append(CARD.format(no=no, tag=html.escape(tag), mine=mine.get(no, "&nbsp;"), ans=answers.get(no, "&nbsp;"), psg=psg, img=q["images"][0], more=more))
-    out = out or os.path.join(folder, f"오답노트_{sid or '샘플'}.html")
-    open(out, "w", encoding="utf-8").write(PAGE.format(title=title, n=len(wrong), sid=sid, name=name, rows="".join(rows), cards="".join(cards)))
+    out = out or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(folder))), "오답노트_샘플", f"{os.path.basename(os.path.normpath(folder))}_{sid or '샘플'}_v1.html")
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    rel = os.path.relpath(os.path.abspath(folder), os.path.dirname(os.path.abspath(out))).replace("\\", "/")   # 그림은 크롭 폴더에 그대로, HTML 만 샘플 폴더로
+    html_ = PAGE.format(title=title, n=len(wrong), sid=sid, name=name, rows="".join(rows), cards="".join(cards)).replace('src="', f'src="{rel}/').replace("src='", f"src='{rel}/")
+    open(out, "w", encoding="utf-8").write(html_)
     return out
 
 
