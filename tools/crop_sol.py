@@ -30,7 +30,7 @@ def answers(page, n_max=50, numeric_from=None):
             if re.fullmatch(r"\d{4,6}", nxt) and nxt.endswith(glue) and len(nxt) > len(glue):
                 toks[i + 1:i + 2] = [nxt[:-len(glue)], glue]
                 nxt = toks[i + 1]
-            if RE_ANS.match(nxt) and (not nxt.isdigit() or (numeric_from and expect >= numeric_from)):
+            if RE_ANS.match(nxt) and (not nxt.isascii() or (numeric_from and expect >= numeric_from)):  # 동그라미 숫자는 isdigit()가 참이라 isascii로 가른다
                 out[expect] = nxt
                 expect += 1
                 i += 1   # 정답 토큰은 다음 번호 후보에서 뺀다 ("22 23 23 7": 22번 답 23, 23번 답 7)
