@@ -7,6 +7,10 @@
   "d1_databases": [
     { "binding": "DB", "database_name": "mock-exam", "database_id": "84fa3deb-63b0-4757-abca-46b2b6e4411a" }
   ],
+  // 문항·지문·해설 그림 창고(교육청 저작물 → 공개 버킷이 아니라 Worker가 로그인 확인 후 전달). 올리기: tools/upload_r2.py
+  "r2_buckets": [
+    { "binding": "ITEMS", "bucket_name": "mock-exam-items" }
+  ],
   // 정답 DB 서버(Supabase, 엑셀 '학평 분석 시스템'과 공용). anon 키는 읽기 전용 공개 키.
   // 쓰기(정답표 push)는 비밀 SUPABASE_SERVICE_KEY: wrangler secret put SUPABASE_SERVICE_KEY (로컬은 .dev.vars)
   "vars": {

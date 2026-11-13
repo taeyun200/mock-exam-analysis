@@ -275,6 +275,18 @@
         <h2>학생별 원점수</h2>
         <div class="scroll"><table class="num" id="stuTable"></table></div>
       </section>
+
+      <section>
+        <h2>오답노트</h2>
+        <p class="muted">학생 한 명·과목 하나의 오답노트를 A4 인쇄용으로 엽니다. "1등급 업"은 바로 위 등급 학생들은 맞히는데 이 학생은 틀린 문항 6개만 모읍니다(학평 분석 엑셀의 도약 문항 규칙).</p>
+        <div class="row">
+          <label>과목 <select id="nSubject"></select></label>
+          <label>학생 <select id="nStudent"></select></label>
+          <label><input type="radio" name="nMode" value="all" checked> 틀린 문항 전부</label>
+          <label><input type="radio" name="nMode" value="leap"> 1등급 업 문항</label>
+          <button type="button" id="nOpen">오답노트 열기</button>
+        </div>
+      </section>
     </div>
   </section>
 
@@ -1028,6 +1040,19 @@ function render() {
   $('subject').onchange = renderSubject;
   renderSubject();
   renderStudents();
+  renderNotePicker();
+}
+
+// 오답노트 열기: 과목·학생·모드 → note.html (새 탭)
+function renderNotePicker() {
+  $('nSubject').innerHTML = data.subs.map(s => `<option>${esc(s)}</option>`).join('');
+  const stu = [...new Map(data.scores.map(s => [`${s.class_no}-${s.student_no}`, s])).values()].sort((a, b) => a.class_no - b.class_no || a.student_no - b.student_no);
+  $('nStudent').innerHTML = stu.map(s => `<option value="${s.class_no}|${s.student_no}">${s.class_no}반 ${s.student_no}번</option>`).join('');
+  $('nOpen').onclick = () => {
+    const [c, n] = $('nStudent').value.split('|'), mode = document.querySelector('input[name=nMode]:checked').value;
+    const grade = data.name.match(/(\d)학년$/)?.[1] ?? $('rGrade').value;
+    window.open(`/note.html?${new URLSearchParams({ exam: data.exam, grade, subject: $('nSubject').value, class_no: c, student_no: n, mode })}`, '_blank');
+  };
 }
 
 function renderTiles() {

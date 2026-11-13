@@ -11,6 +11,7 @@ const SESSION_SEC = 7 * 24 * 3600;
 export default {
   async fetch(req, env, ctx) {
     const url = new URL(req.url);
+    if (url.pathname.startsWith('/items/')) return items(req, url, env);   // 문항 그림: 로그인한 사용자만
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(req);
     try {
       const body = req.method === 'GET' ? null : await req.json().catch(() => fail(400, '본문이 JSON이 아닙니다'));
@@ -23,6 +24,19 @@ export default {
     }
   },
 };
+
+// ── 문항 그림(R2) ──────────────────────────────────
+// /items/<회차폴더>/<파일> → R2 객체. 로그인 없으면 401. 브라우저 캐시 1일(private).
+async function items(req, url, env) {
+  try { await whoami(req, env); } catch (e) { return Response.json({ error: e.message }, { status: e.status ?? 401 }); }
+  if (!env.ITEMS) return new Response('그림 창고(R2)가 연결되지 않았습니다', { status: 503 });
+  const key = decodeURIComponent(url.pathname.slice('/items/'.length));
+  if (!key || key.includes('..')) return new Response('bad key', { status: 400 });
+  const obj = await env.ITEMS.get(key);
+  if (!obj) return new Response('not found', { status: 404 });
+  const type = key.endsWith('.png') ? 'image/png' : key.endsWith('.json') ? 'application/json; charset=utf-8' : 'application/octet-stream';
+  return new Response(obj.body, { headers: { 'content-type': type, 'cache-control': 'private, max-age=86400', etag: obj.httpEtag } });
+}
 
 // ── 인증 ────────────────────────────────────────────
 const cookie = (v, maxAge) => `sid=${v}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;

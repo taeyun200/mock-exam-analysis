@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<title>오답노트</title>
+<meta name="viewport" content="width=device-width">
+<!-- 오답노트(v2 양식, tools/note_v2.py 와 같은 구성). 주소: /note.html?exam=2026-10&grade=2&subject=국어&class_no=1&student_no=1&mode=all|leap
+     재료는 /api/note, 그림은 /items/<회차폴더>/… (로그인한 사용자만). 모든 쪽은 A4 고정 크기라 PDF 저장 시 밀리지 않는다. -->
+<style>
+@page{size:A4;margin:12mm}
+*{box-sizing:border-box} html,body{margin:0;padding:0}
+body{font-family:"Malgun Gothic",system-ui,sans-serif;color:#1f2937;background:#f3f4f6;font-size:12px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.pg{width:186mm;height:270mm;overflow:hidden;margin:14px auto;background:#fff;padding:0;box-shadow:0 2px 8px #0002;page-break-after:always;break-after:page;display:flex;flex-direction:column}
+.pg:last-child{page-break-after:auto;break-after:auto}
+@media print{body{background:#fff}.pg{margin:0;box-shadow:none}.noprint{display:none}}
+h1{font-size:18px;color:#1e3a5f;margin:0 0 2px} .sub{color:#6b7280;margin-bottom:8px;font-size:11px}
+table{border-collapse:collapse;width:100%} th,td{border:1px solid #cbd5e1;padding:3px 5px;text-align:center;font-size:11px} th{background:#eef2f7} td.l,th.l{text-align:left}
+.who{font-size:12px;text-align:right;margin-bottom:4px} .who span{display:inline-block;min-width:60px;border-bottom:1px solid #777;padding:0 4px}
+.psg h2{font-size:14px;margin:0 0 4px;color:#1e3a5f;border-left:4px solid #1e3a5f;padding-left:8px} .psg .note{color:#6b7280;font-size:11px;margin-bottom:5px}
+.psg .pieces{display:flex;gap:4mm;align-items:flex-start} .psg img{width:91mm;max-height:248mm;object-fit:contain;object-position:top left;display:block}
+.hd{background:#1e3a5f;color:#fff;padding:5px 9px;display:flex;gap:10px;align-items:center;font-size:12.5px;border-radius:4px}
+.hd .tag{opacity:.85;font-weight:normal;font-size:11px} .hd .ans{margin-left:auto;font-size:11.5px} .hd b{background:#fff;color:#1e3a5f;border-radius:10px;padding:0 7px;margin-left:3px}
+.top{display:flex;gap:4mm;margin:5px 0 3px;min-height:92mm;align-items:stretch}
+.top .qimg{width:101mm;flex:none} .top .qimg img{width:101mm;max-height:128mm;object-fit:contain;object-position:top left;display:block}
+.top .box{flex:1}
+.sec{font-weight:700;color:#1e3a5f;font-size:12px;margin:5px 0 3px} .sec small{font-weight:normal;color:#6b7280;margin-left:6px}
+table.ch td{height:9mm;vertical-align:middle} table.ch td.w{text-align:left} table.ch .me{background:#fdecec} table.ch .ok{background:#e8f5ec;font-weight:700}
+.conf{font-size:12px;margin:4px 0 2px} .conf span{display:inline-block;margin-right:14px}
+ol.cause{columns:2;column-gap:8mm;margin:0;padding-left:0;list-style:none;font-size:11.5px} ol.cause li{break-inside:avoid;margin:1px 0}
+.boxes{display:flex;gap:4mm;flex:1;min-height:0;margin-top:3px} .box{flex:1;border:1px solid #cbd5e1;border-radius:4px;padding:5px 7px;display:flex;flex-direction:column}
+.box .t{font-weight:700;color:#1e3a5f;font-size:11.5px;margin-bottom:2px} .box .t small{font-weight:normal;color:#6b7280;margin-left:4px}
+.box .lines{flex:1;display:flex;flex-direction:column;justify-content:space-between} .box .lines i{display:block;border-bottom:1px solid #cbd5e1;height:0}
+.wrap h2{font-size:14px;color:#1e3a5f;margin:12px 0 5px} .wrap .box2{border:1px solid #cbd5e1;border-radius:4px;min-height:34mm;padding:6px;color:#6b7280;font-size:11px}
+.noprint{text-align:center;margin:10px;font-size:13px} .noprint button{padding:6px 14px}
+.err{max-width:186mm;margin:40px auto;background:#fff;padding:20px;border-radius:6px;color:#b91c1c}
+</style>
+<body>
+<div class="noprint"><button onclick="print()">🖨 인쇄 / PDF 저장</button> &nbsp;<span style="color:#6b7280">인쇄 대화상자에서 용지 A4 · 여백 '기본' · 배율 100%</span></div>
+<div id="out"></div>
+<script>
+const TAGS = {
+  '독서': ['지문에서 정보를 못 찾음 (사실적 이해)', '추론을 과하게 했거나 못 함', '선지 덫: 주체·대상을 바꿈', '선지 덫: 범위·정도를 과장', '선지 덫: 인과·순서를 뒤집음', '지문에 없는 내용을 맞다고 봄', '<보기>를 지문에 적용 못 함', '시간이 부족해 대충 읽음'],
+  '문학': ['화자·인물·상황 파악 실패', '표현·서술상 특징 오판', '<보기>의 관점으로 못 읽음', '시어·구절 의미 오해', '갈래 지식 부족', '선지를 과하게 해석'],
+  '화법·작문': ['문제의 조건을 빠뜨림', '자료 활용 방식 오해', '발화 의도·맥락 오독', '고쳐쓰기 기준 혼동', '시간 부족'],
+  '문법': ['개념을 모름', '개념 둘을 혼동', '개념은 아는데 예시 적용 실패', '<보기> 설명을 잘못 읽음'],
+  '국어': ['지문 오독', '선지 오독', '<보기> 적용 실패', '개념 부족', '시간 부족', '찍음'],
+  '수학': ['문제 읽기(조건 누락)', '무엇을 구하는지 오해', '식 세우기 실패', '계산·절차 실수', '답 표기(단답형)', '개념 모름', '공식 혼동', '시간 부족'],
+  '영어': ['어휘를 모름', '구문(문장 구조) 해석 실패', '글의 논리(주제·흐름) 놓침', '선지 덫(부분 일치)', '유형별 전략 없음', '시간 부족'],
+  '사회': ['개념 혼동', '사례→개념 연결 실패', '자료(표·그래프) 해석 실패', '보기 ㄱㄴㄷ 중 하나 오판', '사상가·관점 혼동', '시간 부족'],
+  '과학': ['개념 모름', '개념 혼동', '자료·실험 해석 실패', '계산·단위 실수', '보기 ㄱㄴㄷ 중 하나 오판', '조건(단, ~) 누락'],
+  '한국사': ['시기 혼동', '인물·사건 연결 실패', '사료 해석 실패', '선지 키워드 함정', '지도·자료 읽기 실패'],
+};
+const NAT = { A: '80%↑', B: '60~80', C: '40~60', D: '20~40', E: '20%↓' };
+const CIRC = ['', '①', '②', '③', '④', '⑤'];
+const circ = v => (v == null || v === '') ? '' : (CIRC[+v] ?? String(v));
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const num = v => v == null ? '' : (+v % 1 ? String(+v) : String(Math.round(+v)));
+const lines = n => '<div class=lines>' + '<i></i>'.repeat(n) + '</div>';
+
+(async () => {
+  const p = new URLSearchParams(location.search);
+  const out = document.getElementById('out');
+  const need = ['exam', 'grade', 'subject', 'class_no', 'student_no'];
+  if (need.some(k => !p.get(k))) { out.innerHTML = '<div class=err>주소에 exam, grade, subject, class_no, student_no 가 필요합니다.</div>'; return; }
+  const q = new URLSearchParams({ exam: p.get('exam'), grade: p.get('grade'), subject: p.get('subject'), class_no: p.get('class_no'), student_no: p.get('student_no'), mode: p.get('mode') || 'all' });
+  if (p.get('school')) q.set('school', p.get('school'));
+  const r = await fetch('/api/note?' + q);
+  const d = await r.json();
+  if (!r.ok) { out.innerHTML = `<div class=err>${esc(d.error || r.status)}</div>`; return; }
+  const folder = `${d.exam}_고${d.grade}_${d.subject}`;
+  const base = '/items/' + encodeURIComponent(folder) + '/';
+  const mr = await fetch(base + 'manifest.json');
+  if (!mr.ok) { out.innerHTML = `<div class=err>이 회차·과목의 문항 그림이 아직 올라가 있지 않습니다 (${esc(folder)}).</div>`; return; }
+  const mf = await mr.json();
+  const qs = Object.fromEntries(mf.questions.map(x => [x.no, x]));
+  const ps = Object.fromEntries(mf.passages.map(x => [x.range, x]));
+  const subj = d.subject, leap = d.mode === 'leap';
+  const title = `${d.exam.slice(0, 4)}학년도 ${+d.exam.slice(5)}월 고${d.grade} 전국연합학력평가 ${subj}`;
+  const sid = `${d.grade}-${d.class_no}-${d.student_no}`;
+  const sepPassage = subj === '국어' || subj === '영어';
+  const items = d.items.filter(i => qs[i.q_no]);
+  const area = i => i.area || subj, tags = i => TAGS[area(i)] || TAGS[subj] || [];
+  const img = f => `<img src="${base}${encodeURIComponent(f).replace(/%2F/g, '/')}">`;
+
+  // 표지
+  const refcol = leap ? '<th>위 등급 정답률</th>' : '';
+  const rows = items.map(i => `<tr><td>${i.q_no}</td><td class=l>${esc(area(i))}</td><td>${num(i.points)}</td><td>${NAT[i.nat] || ''}</td>` +
+    (leap ? `<td>${i.ref_rate == null ? '' : Math.round(i.ref_rate * 100) + '%'}</td>` : '') +
+    `<td>${circ(i.marked)}</td><td>${esc(i.answer)}</td><td>○확신 ○반반 ○찍음</td><td></td></tr>`).join('');
+  const head = leap
+    ? `<h1>${esc(title)} 오답노트 — 1등급 업</h1><div class=sub>내 원점수 ${num(d.my_score)}점 · <b>${d.my_grade}등급</b> → 목표 <b>${d.target_grade}등급</b> (기준 집단 ${d.ref_n}명). 기준 집단은 대부분 맞히는데 내가 틀린 문항 ${items.length}개를 그 정답률 순으로 모았다. 이 문항들을 잡으면 한 등급이 오른다.</div>`
+    : `<h1>${esc(title)} 오답노트</h1><div class=sub>오답 ${items.length}문항 · 문항마다 한 쪽: 선지별로 왜 맞고 틀리는지 적고, 원인 유형을 고르고, 해설과 EBS 강의 내용을 내 말로 정리한다.</div>`;
+  let html = `<div class=pg><div class=who>학년/반/번호 <span>${esc(sid)}</span> 이름 <span>&nbsp;</span></div>${head}` +
+    `<table><tr><th>번호</th><th class=l>영역</th><th>배점</th><th>전국 정답률</th>${refcol}<th>내 답</th><th>정답</th><th>그때 확신도</th><th>원인 번호</th></tr>${rows}</table>` +
+    `<p class=sub style="margin-top:8px">전국 정답률은 성적통지표 구간(A 80% 이상 … E 20% 미만). '확신'인데 틀린 문항부터 정리한다.</p></div>`;
+
+  // 지문 쪽 + 문항 쪽
+  const done = new Set();
+  for (const i of items) {
+    const q = qs[i.q_no];
+    if (sepPassage && q.passage && !done.has(q.passage)) {
+      done.add(q.passage);
+      const inSet = items.filter(x => qs[x.q_no].passage === q.passage).map(x => x.q_no);
+      const pieces = ps[q.passage]?.flow || ps[q.passage]?.images || [];
+      for (let k = 0; k < pieces.length; k += 2) {
+        const more = pieces.length > 2 ? ` (${k / 2 + 1}/${Math.ceil(pieces.length / 2)})` : '';
+        html += `<div class="pg psg"><h2>지문 [${esc(q.passage)}]${more}</h2><div class=note>이 지문에서 틀린 문항: ${inSet.join(', ')}번</div><div class=pieces>${pieces.slice(k, k + 2).map(img).join('')}</div></div>`;
+      }
+    }
+    const ans = String(i.answer ?? ''), my = circ(i.marked), isMc = CIRC.includes(ans) && ans;
+    const kind = /않은/.test(q.text || '') ? '적절하지 않은 것 (정답 1개가 왜 틀렸고 나머지는 왜 맞는지)' : '가장 적절한 것 (나머지 4개가 왜 틀렸는지)';
+    const choices = isMc
+      ? `<div class=sec>선지별 정리 <small>${kind}</small></div><table class=ch><tr><th style="width:9mm">선지</th><th style="width:14mm"></th><th class=l>이 선지가 맞는/틀린 이유 (지문·조건의 근거)</th></tr>` +
+        CIRC.slice(1).map(c => `<tr class="${c === ans ? 'ok' : ''} ${c === my && c !== ans ? 'me' : ''}"><td>${c}</td><td>${c === ans ? '정답' : c === my ? '내 답' : ''}</td><td class=w></td></tr>`).join('') + '</table>'
+      : `<div class=sec>풀이 정리 <small>어디까지 맞았고 어디서 틀렸는지</small></div><table class=ch><tr><td class=w style="height:30mm"></td></tr></table>`;
+    const meta = esc(area(i)) + (q.intent ? ' · ' + esc(q.intent) : '') + (NAT[i.nat] ? ` · 전국 ${i.nat} ${NAT[i.nat]}` : '') + (i.ref_rate != null ? ` · 위 등급 정답률 ${Math.round(i.ref_rate * 100)}%` : '');
+    const psg = q.passage && sepPassage ? ` <span class=tag>지문 [${esc(q.passage)}] 쪽 참고</span>` : '';
+    html += `<div class=pg><div class=hd>${i.q_no}번 <span class=tag>${num(i.points)}점 · ${meta}</span>${psg}<span class=ans>내 답<b>${my || '&nbsp;'}</b> 정답<b>${esc(ans) || '&nbsp;'}</b></span></div>` +
+      `<div class=top><div class=qimg>${q.images.map(img).join('')}</div><div class=box><div class=t>해설 정리<small>해설지를 읽고 핵심 근거·개념을 내 말로</small></div>${lines(12)}</div></div>${choices}` +
+      `<div class=conf><b style="color:#1e3a5f">그때 확신도</b> &nbsp;<span>○ 확신</span><span>○ 반반</span><span>○ 찍음</span></div>` +
+      `<div class=sec>원인 유형 <small>해당 번호에 ✓ (2개까지) · 표지의 '원인 번호' 칸에 옮겨 적기</small></div><ol class=cause>${tags(i).map((t, k) => `<li>□ ${k + 1}. ${esc(t)}</li>`).join('')}</ol>` +
+      `<div class=boxes><div class=box><div class=t>EBS 오답 강의 정리<small>강의에서 짚은 포인트·내가 몰랐던 것</small></div>${lines(6)}</div></div></div>`;
+  }
+  html += `<div class="pg wrap"><h1>시험 성찰</h1><div class=sub>이 회차 전체를 돌아보는 한 쪽. 오답노트를 다 쓴 뒤에 적는다.</div>` +
+    `<h2>1. 준비</h2><div class=box2>이 과목을 어떻게, 얼마나 준비했나 (방법 · 시간)</div>` +
+    `<h2>2. 시험 중</h2><div class=box2>시간 배분 · 찍은 문항 수 ___ · '확신'인데 틀린 문항 수 ___ · 끝까지 못 푼 문항 ___</div>` +
+    `<h2>3. 원인 집계</h2><div class=box2>표지의 '원인 번호'를 세어 가장 많은 유형 두 개: 1) ________ 2) ________ · 지난 회차와 같은 유형이 있나? ○예 ○아니오</div>` +
+    `<h2>4. 다음 시험까지 바꿀 것 두 가지</h2><div class=box2>1)<br><br>2)</div></div>`;
+  document.title = `${title} 오답노트 ${sid}`;
+  out.innerHTML = html;
+})();
+</script>
+</body>
+</html>
