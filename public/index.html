@@ -1051,7 +1051,7 @@ function renderNotePicker() {
   $('nOpen').onclick = () => {
     const [c, n] = $('nStudent').value.split('|'), mode = document.querySelector('input[name=nMode]:checked').value;
     const grade = data.name.match(/(\d)학년$/)?.[1] ?? $('rGrade').value;
-    window.open(`/note.html?${new URLSearchParams({ exam: data.exam, grade, subject: $('nSubject').value, class_no: c, student_no: n, mode })}`, '_blank');
+    window.open(`/note?${new URLSearchParams({ exam: data.exam, grade, subject: $('nSubject').value, class_no: c, student_no: n, mode })}`, '_blank');
   };
 }
 
