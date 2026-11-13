@@ -5,6 +5,9 @@
 인쇄: 모든 쪽이 A4 고정 크기(186×270mm, 넘치면 잘림)라 PDF 저장 시 밀리지 않는다. 브라우저 인쇄 여백은 '기본'으로 둘 것.
 """
 import json, os, sys, html
+from PIL import Image
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from reflow import reflow
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -102,7 +105,12 @@ def build(folder, wrong, mine=None, sid="", name="", out=None, units=None):
         if sep_passage and q.get("passage") and q["passage"] not in done:
             done.add(q["passage"])
             in_set = [n for n in wrong if qs[n].get("passage") == q["passage"]]
-            pieces = ps[q["passage"]]["images"]
+            pieces = [os.path.join(folder, f) for f in ps[q["passage"]]["images"]]
+            if len(pieces) > 1:   # 왼쪽 단을 끝까지 채우고 오른쪽으로 다시 흘려 넣기(줄 단위, 되도록 문단 앞에서 끊음)
+                os.makedirs(os.path.join(folder, "flow"), exist_ok=True)
+                W = max(Image.open(x).width for x in pieces)
+                pieces = reflow(pieces, os.path.join(folder, "flow", f"set{q['passage']}"), col_h=int(W * 238 / 91))   # 단 폭 91mm ↔ 높이 238mm
+            pieces = [os.path.relpath(x, folder).replace("\\", "/") for x in pieces]
             for i in range(0, len(pieces), 2):   # 한 쪽에 조각 2개(세로 2단), 넘치면 다음 쪽
                 imgs = "".join(f'<img src="{f}">' for f in pieces[i:i + 2])
                 more = f" ({i // 2 + 1}/{(len(pieces) + 1) // 2})" if len(pieces) > 2 else ""
