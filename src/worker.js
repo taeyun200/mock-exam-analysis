@@ -26,16 +26,34 @@ export default {
 };
 
 // ── 문항 그림(R2) ──────────────────────────────────
-// /items/<회차폴더>/<파일> → R2 객체. 로그인 없으면 401. 브라우저 캐시 1일(private).
+// /items/<회차폴더>/<파일> → R2. 로그인 없으면 401. 그림은 폴더마다 무압축 zip 하나(<폴더>.zip)에 들어 있고
+// <폴더>/index.json 이 {파일: [시작, 길이]} 라서 바이트 범위만 읽는다(tools/upload_r2.py). manifest.json 은 따로 있다.
+const indexCache = new Map();
+// 로컬 개발 서버(wrangler r2 object put --local)는 한글 키를 퍼센트 인코딩한 채 저장하므로 못 찾으면 그 형태로 한 번 더 찾는다
+const getObj = (env, key, opts) => env.ITEMS.get(key, opts).then(o => o ?? env.ITEMS.get(key.split('/').map(encodeURIComponent).join('/'), opts));
 async function items(req, url, env) {
   try { await whoami(req, env); } catch (e) { return Response.json({ error: e.message }, { status: e.status ?? 401 }); }
   if (!env.ITEMS) return new Response('그림 창고(R2)가 연결되지 않았습니다', { status: 503 });
   const key = decodeURIComponent(url.pathname.slice('/items/'.length));
-  if (!key || key.includes('..')) return new Response('bad key', { status: 400 });
-  const obj = await env.ITEMS.get(key);
+  const m = /^([^/]+)\/(.+)$/.exec(key);
+  if (!m || key.includes('..')) return new Response('bad key', { status: 400 });
+  const [, folder, file] = m;
+  const headers = { 'cache-control': 'private, max-age=86400' };
+  if (file === 'manifest.json' || file === 'index.json') {
+    const obj = await getObj(env, key);
+    return obj ? new Response(obj.body, { headers: { ...headers, 'content-type': 'application/json; charset=utf-8' } }) : new Response('not found', { status: 404 });
+  }
+  let index = indexCache.get(folder);
+  if (!index) {
+    const io = await getObj(env, `${folder}/index.json`);
+    if (!io) return new Response('not found', { status: 404 });
+    index = await io.json(); indexCache.set(folder, index);
+  }
+  const span = index[file];
+  if (!span) return new Response('not found', { status: 404 });
+  const obj = await getObj(env, `${folder}.zip`, { range: { offset: span[0], length: span[1] } });
   if (!obj) return new Response('not found', { status: 404 });
-  const type = key.endsWith('.png') ? 'image/png' : key.endsWith('.json') ? 'application/json; charset=utf-8' : 'application/octet-stream';
-  return new Response(obj.body, { headers: { 'content-type': type, 'cache-control': 'private, max-age=86400', etag: obj.httpEtag } });
+  return new Response(obj.body, { headers: { ...headers, 'content-type': file.endsWith('.png') ? 'image/png' : 'application/octet-stream' } });
 }
 
 // ── 인증 ────────────────────────────────────────────
