@@ -74,7 +74,7 @@ def columns(page, margins):
     out = []
     for (x0, x1), m in zip(col_rects(page.rect.width, margins), margins):
         top, bottom = frame(page, ls, x0, x1)
-        col = [l for l in ls if x0 <= l[0] < x1 and top <= l[1] < bottom]
+        col = [l for l in ls if x0 <= l[0] < x1 and top - 3 <= l[1] < bottom]   # 머리글 띠와 본문이 1~2pt 겹치는 회차(2025-10 수학 14번)가 있어 3pt 여유
         if col:
             out.append((pymupdf.Rect(x0, min(l[1] for l in col) - PAD, x1, bottom - PAD), col, m))
     return out
