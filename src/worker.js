@@ -1,7 +1,7 @@
 // API. 정적 페이지(public/)는 Workers Assets가 먼저 서빙하고, /api/* 만 여기로 온다.
 // 로그인은 학교 ID + 비밀번호. 운영자가 admin.html에서 학교별 ID를 만들어 준다.
 // 권한(자기 학교만 보기)은 RLS 대신 여기서 모든 쿼리에 school_code를 붙여서 지킨다.
-import { SUBJECTS, score, itemStats, distractors, studentScores, schoolSummary } from './scoring.js';
+import { SUBJECTS, score, itemStats, distractors, studentScores, schoolSummary, leapItems } from './scoring.js';
 import { hashPassword, verifyPassword, sign } from './auth.js';
 import { crawlEbs } from './ebs.js';
 
@@ -264,6 +264,40 @@ async function route(method, url, body, me, env, ctx) {
       dists: Object.fromEntries(subs.map(s => [s, distractors(scored, s)])),
       scores: studentScores(mine).map(({ student_key, school_code, ...s }) => s),
       marks: mine.map(c => ({ subject: c.subject, grade: c.grade, class_no: c.class_no, student_no: c.student_no, q_no: c.q_no, marked: c.marked, is_correct: c.is_correct })),
+    };
+  }
+
+  // 오답노트 재료: 한 학생·한 과목. mode=all(틀린 문항 전부) | leap(1등급 업: 위 등급 집단은 맞히고 나는 틀린 문항, 엑셀 개인성적표 ■6 규칙)
+  // 학교 계정은 자기 학교 학생만. 등급컷은 정답 DB 서버 grade_cuts(EBS), 문항 영역·전국 정답률은 item_units·official_items.
+  if (r === 'GET /note') {
+    const x = await exam(q.get('exam')), g = grade(q.get('grade')), sub = subject(q.get('subject'));
+    if (!x.is_open) fail(403, '아직 개방되지 않은 회차입니다');
+    const school = me.role === 'admin' ? (q.get('school') || fail(400, 'school 필요')) : me.school_code || fail(403, '학교가 배정되지 않은 계정입니다');
+    const cls = int(q.get('class_no')), no = int(q.get('student_no')), mode = q.get('mode') === 'leap' ? 'leap' : 'all';
+    const keys = await rows('select subject, q_no, answer, points, q_type, unit from answer_keys where exam_code = ? and grade = ? and subject = ?', x.exam_code, g, sub);
+    const raw = await rows(`select s.school_code, s.subject, r.grade, r.class_no, r.student_no, r.q_no, r.marked
+      from responses r join submissions s on s.id = r.submission_id where s.exam_code = ? and s.grade = ? and s.subject = ? and s.is_active = 1`, x.exam_code, g, sub);
+    const scored = score(raw, keys);
+    const ex = encodeURIComponent(toExcelExam(x.exam_code)), es = encodeURIComponent(sub);
+    const [cutRows, units, nat] = await Promise.all([
+      sbAll(env, `grade_cuts?select=rank,cut&exam=eq.${ex}&grade=eq.${g}&subject=eq.${es}`).catch(() => []),
+      sbAll(env, `item_units?select=q_no,unit,area&exam=eq.${ex}&grade=eq.${g}&subject=eq.${es}`).catch(() => []),
+      sbAll(env, `official_items?select=q_no,difficulty&exam=eq.${ex}&grade=eq.${g}&subject=eq.${es}&difficulty=not.is.null`).catch(() => []),
+    ]);
+    const cuts = Object.fromEntries(cutRows.map(c => [c.rank, c.cut]));
+    if (!Object.keys(cuts).length && mode === 'leap') fail(409, '이 회차·과목의 EBS 등급컷이 아직 없어 1등급 업 문항을 계산할 수 없습니다');
+    const leap = leapItems(scored, `${school}-${g}-${cls}-${no}`, sub, cuts, 6);
+    if (!leap) fail(404, '해당 학생의 응답이 없습니다');
+    const U = Object.fromEntries(units.map(u => [u.q_no, u])), N = Object.fromEntries(nat.map(n => [n.q_no, n.difficulty]));
+    const K = Object.fromEntries(keys.map(k => [k.q_no, k]));
+    const pick = mode === 'leap' ? leap.items.map(i => i.q_no) : leap.wrong;
+    const marks = new Map(scored.filter(c => c.student_key === `${school}-${g}-${cls}-${no}`).map(c => [c.q_no, c.marked]));
+    return {
+      exam: x.exam_code, grade: g, subject: sub, school, class_no: cls, student_no: no, mode,
+      my_score: leap.my_score, my_grade: leap.my_grade, target_grade: leap.target_grade, ref_n: leap.ref_n, cuts,
+      items: pick.map(qn => ({ q_no: qn, marked: marks.get(qn) ?? null, answer: K[qn]?.answer ?? null, points: K[qn]?.points ?? null,
+        area: U[qn]?.area ?? null, unit: U[qn]?.unit ?? null, nat: N[qn] ?? null,
+        ref_rate: leap.items.find(i => i.q_no === qn)?.ref_rate ?? null })),
     };
   }
 

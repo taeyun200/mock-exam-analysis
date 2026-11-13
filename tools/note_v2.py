@@ -1,6 +1,7 @@
 """오답노트 v2 — 메타인지 분석형 (docs/오답노트_양식_제안.md + 2026-11-13 피드백 반영)
 
 사용: python tools/note_v2.py <크롭폴더> 3,4,7 [--mine 3=4,4=4] [--sid 2-1-1] [--name 홍길동] [--units <json>] [--out 파일.html]
+      python tools/note_v2.py <크롭폴더> --api <GET /api/note 응답 json> [--name 홍길동]   ← 사이트에서 받은 재료로(틀린 문항 전부 / 1등급 업)
 구성: 표지 → 세트 지문 페이지(국어·영어) → 문항 1개 = 1쪽(문항 그림 · 선지별 정리 · 확신도 · 원인 목록 · 해설 정리 · EBS 강의 정리) → 시험 성찰
 인쇄: 모든 쪽이 A4 고정 크기(186×270mm, 넘치면 잘림)라 PDF 저장 시 밀리지 않는다. 브라우저 인쇄 여백은 '기본'으로 둘 것.
 """
@@ -55,7 +56,7 @@ ol.cause{columns:2;column-gap:8mm;margin:0;padding-left:0;list-style:none;font-s
 """
 
 
-def build(folder, wrong, mine=None, sid="", name="", out=None, units=None):
+def build(folder, wrong, mine=None, sid="", name="", out=None, units=None, leap=None):
     mf = json.load(open(os.path.join(folder, "manifest.json"), encoding="utf-8"))
     e, qs = mf["exam"], {q["no"]: q for q in mf["questions"]}
     ps = {p["range"]: p for p in mf["passages"]}
@@ -70,18 +71,25 @@ def build(folder, wrong, mine=None, sid="", name="", out=None, units=None):
     sep_passage = subj in ("국어", "영어")
     is_mc = lambda q: str(q.get("answer", "")) in CIRC.values()
 
-    # 표지
+    # 표지. leap = {my_score, my_grade, target_grade, ref_n, ref_rate:{번호: 기준 집단 정답률}} 이면 "1등급 업" 모드
+    rr = (leap or {}).get("ref_rate", {})
+    refcol = "<th>위 등급 정답률</th>" if leap else ""
     rows = "".join(f"<tr><td>{no}</td><td class=l>{html.escape(area_of(no))}</td><td>{num(qs[no].get('points'))}</td><td>{NAT.get(qs[no].get('nat', ''), '')}</td>"
-                   f"<td>{mine.get(no, '')}</td><td>{qs[no].get('answer', '')}</td><td>○확신 ○반반 ○찍음</td><td></td></tr>" for no in wrong)
-    cover = (f"<div class=pg><div class=who>학년/반/번호 <span>{html.escape(sid)}</span> 이름 <span>{html.escape(name)}</span></div>"
-             f"<h1>{title} 오답노트</h1><div class=sub>오답 {len(wrong)}문항 · 문항마다 한 쪽: 선지별로 왜 맞고 틀리는지 적고, 원인 유형을 고르고, 해설과 EBS 강의 내용을 내 말로 정리한다.</div>"
-             f"<table><tr><th>번호</th><th class=l>영역</th><th>배점</th><th>전국 정답률</th><th>내 답</th><th>정답</th><th>그때 확신도</th><th>원인 번호</th></tr>{rows}</table>"
+                   + (f"<td>{'' if rr.get(no) is None else f'{rr[no] * 100:.0f}%'}</td>" if leap else "")
+                   + f"<td>{mine.get(no, '')}</td><td>{qs[no].get('answer', '')}</td><td>○확신 ○반반 ○찍음</td><td></td></tr>" for no in wrong)
+    if leap:
+        head = (f"<h1>{title} 오답노트 — 1등급 업</h1><div class=sub>내 원점수 {num(leap['my_score'])}점 · <b>{leap['my_grade']}등급</b> → 목표 <b>{leap['target_grade']}등급</b> (기준 집단 {leap['ref_n']}명). "
+                f"기준 집단은 대부분 맞히는데 내가 틀린 문항 {len(wrong)}개를 그 정답률 순으로 모았다. 이 문항들을 잡으면 한 등급이 오른다.</div>")
+    else:
+        head = f"<h1>{title} 오답노트</h1><div class=sub>오답 {len(wrong)}문항 · 문항마다 한 쪽: 선지별로 왜 맞고 틀리는지 적고, 원인 유형을 고르고, 해설과 EBS 강의 내용을 내 말로 정리한다.</div>"
+    cover = (f"<div class=pg><div class=who>학년/반/번호 <span>{html.escape(sid)}</span> 이름 <span>{html.escape(name)}</span></div>{head}"
+             f"<table><tr><th>번호</th><th class=l>영역</th><th>배점</th><th>전국 정답률</th>{refcol}<th>내 답</th><th>정답</th><th>그때 확신도</th><th>원인 번호</th></tr>{rows}</table>"
              f"<p class=sub style='margin-top:8px'>전국 정답률은 성적통지표 구간(A 80% 이상 … E 20% 미만). '확신'인데 틀린 문항부터 정리한다.</p></div>")
 
     def card(no):
         q = qs[no]; area = area_of(no)
         meta = html.escape(area) + (f" · {html.escape(q['intent'])}" if q.get("intent") else "")
-        nat = f" · 전국 {q['nat']} {NAT[q['nat']]}" if q.get("nat") in NAT else ""
+        nat = (f" · 전국 {q['nat']} {NAT[q['nat']]}" if q.get("nat") in NAT else "") + (f" · 위 등급 정답률 {rr[no] * 100:.0f}%" if rr.get(no) is not None else "")
         psg = f" <span class=tag>지문 [{q['passage']}] 쪽 참고</span>" if q.get("passage") and sep_passage else ""
         imgs = "".join(f'<img src="{f}">' for f in q["images"])
         ans, my = str(q.get("answer", "")), str(mine.get(no, ""))
@@ -144,5 +152,15 @@ def kv(s):
 if __name__ == "__main__":
     a = sys.argv[1:]
     opt = lambda k: a[a.index(k) + 1] if k in a else None
-    units = json.load(open(opt("--units"), encoding="utf-8")) if opt("--units") else None
-    print(build(a[0], [int(x) for x in a[1].split(",")], kv(opt("--mine")), opt("--sid") or "", opt("--name") or "", opt("--out"), units))
+    if opt("--api"):   # 사이트 GET /api/note 응답(json 파일)으로
+        d = json.load(open(opt("--api"), encoding="utf-8"))
+        wrong = [i["q_no"] for i in d["items"]]
+        mine = {i["q_no"]: CIRC.get(str(i["marked"]), str(i["marked"] or "")) for i in d["items"]}
+        units = {str(i["q_no"]): {"area": i.get("area"), "nat": i.get("nat")} for i in d["items"]}
+        leap = {k: d[k] for k in ("my_score", "my_grade", "target_grade", "ref_n")} | {"ref_rate": {i["q_no"]: i.get("ref_rate") for i in d["items"]}} if d.get("mode") == "leap" else None
+        sid = f"{d['grade']}-{d['class_no']}-{d['student_no']}"
+        out = opt("--out") or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(a[0]))), "오답노트_샘플", f"{os.path.basename(os.path.normpath(a[0]))}_{sid}_{d['mode']}.html")
+        print(build(a[0], wrong, mine, sid, opt("--name") or "", out, units, leap))
+    else:
+        units = json.load(open(opt("--units"), encoding="utf-8")) if opt("--units") else None
+        print(build(a[0], [int(x) for x in a[1].split(",")], kv(opt("--mine")), opt("--sid") or "", opt("--name") or "", opt("--out"), units))

@@ -134,3 +134,37 @@ export function schoolSummary(scored, mySchool) {
   }
   return out.sort((a, b) => a.subject.localeCompare(b.subject));
 }
+
+// ── 등급·도약 문항 (학평 분석 엑셀 M_개인성적표 ■6 / M_종합분석 ■1(b) 규칙 그대로) ──
+// cuts: {1: 93, 2: 86, …} 원점수 등급컷(EBS grade_cuts). 등급 = 점수 ≥ 컷인 첫 등급, 없으면 9.
+export function gradeOf(score, cuts) {
+  for (let g = 1; g <= 9; g++) if (cuts[g] != null && score >= cuts[g]) return g;
+  return 9;
+}
+
+// 한 학생의 "1등급 업" 문항: 내가 틀렸는데 바로 위 등급 집단(없으면 더 위, 내가 1등급이면 1등급)은 맞히는 문항.
+// 기준 집단은 참여교 전체(scored 안의 모든 학생). 기준 집단 정답률 내림차순 상위 n개. 영어는 듣기(1~17번) 제외.
+export function leapItems(scored, studentKey, subject, cuts, n = 6) {
+  const rows = scored.filter(c => c.subject === subject);
+  const byStu = new Map();
+  for (const c of rows) {
+    const s = byStu.get(c.student_key) ?? { score: 0, right: new Set(), marks: new Map() };
+    if (c.is_correct) { s.score += c.points; s.right.add(c.q_no); }
+    s.marks.set(c.q_no, c.marked);
+    byStu.set(c.student_key, s);
+  }
+  const me = byStu.get(studentKey);
+  if (!me) return null;
+  const grades = new Map([...byStu].map(([k, s]) => [k, gradeOf(s.score, cuts)]));
+  const myGrade = grades.get(studentKey);
+  let target = myGrade === 1 ? 1 : myGrade - 1;
+  while (target > 1 && ![...grades.values()].some(g => g === target)) target--;   // 그 등급이 비어 있으면 더 위 등급
+  const ref = [...byStu].filter(([k, s]) => grades.get(k) === target && k !== studentKey);
+  const qnos = [...new Set(rows.map(c => c.q_no))].filter(q => !(subject === '영어' && q <= 17));
+  const items = qnos.filter(q => !me.right.has(q) && me.marks.has(q)).map(q => ({
+    q_no: q, marked: me.marks.get(q),
+    ref_rate: ref.length ? +(ref.filter(([, s]) => s.right.has(q)).length / ref.length).toFixed(4) : null,
+    all_rate: +([...byStu.values()].filter(s => s.right.has(q)).length / byStu.size).toFixed(4),
+  })).sort((a, b) => (b.ref_rate ?? -1) - (a.ref_rate ?? -1) || a.q_no - b.q_no);
+  return { my_score: me.score, my_grade: myGrade, target_grade: target, ref_n: ref.length, items: items.slice(0, n), wrong: items.map(i => i.q_no).sort((a, b) => a - b) };
+}
