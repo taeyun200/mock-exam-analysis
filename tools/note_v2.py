@@ -27,26 +27,25 @@ TAGS = {
 NAT = {"A": "80%↑", "B": "60~80", "C": "40~60", "D": "20~40", "E": "20%↓"}
 CIRC = {str(i + 1): c for i, c in enumerate("①②③④⑤")}
 PAGINATE_JS = """function paginateEn() {
-  for (let pg = document.querySelector('.pg[data-en]'); pg; pg = pg.nextElementSibling) {
-    if (!pg.dataset.en) continue;
-    let guard = 0;
+  // 앞면에서 넘치는 문장 쌍(문장 줄+해석 줄)은 뒷면 맨 위 "(이어서)" 표로 옮기고, 뒷면이 넘치면 단어·관용어 줄을 줄인다(최소 4줄). EBS 칸은 남는 만큼만.
+  document.querySelectorAll('.pg[data-en]:not([data-back])').forEach(pg => {
+    const back = pg.nextElementSibling, cont = back && back.querySelector('.cont');
+    if (!cont) return;
+    let tb = null, guard = 0;
     while (pg.scrollHeight > pg.clientHeight + 1 && guard++ < 80) {
       const rows = [...pg.querySelectorAll('table.snt tr')];
       if (rows.length < 4) break;                                   // 머리글 + 한 쌍은 남긴다
-      let next = pg.nextElementSibling;
-      if (!(next && next.dataset.en && next.dataset.cont && next.dataset.q === pg.dataset.q)) {
-        next = document.createElement('div'); next.className = 'pg'; next.dataset.en = '1'; next.dataset.cont = '1'; next.dataset.q = pg.dataset.q;
-        next.innerHTML = pg.querySelector('.hd').outerHTML.replace('</span>', ' · 지문 해석 이어서</span>') +
-          '<div class=sec>지문 해석 — 한 문장씩 (이어서)</div><table class=snt>' + rows[0].outerHTML + '</table>';
-        pg.after(next);
-      }
-      const tb = next.querySelector('table.snt tr').parentNode;
+      if (!tb) { cont.innerHTML = '<div class=sec>지문 해석 — 한 문장씩 (이어서)</div><table class=snt>' + rows[0].outerHTML + '</table>'; tb = cont.querySelector('table.snt tr').parentNode; }
       tb.insertBefore(rows[rows.length - 1], tb.children[1]); tb.insertBefore(rows[rows.length - 2], tb.children[1]);
     }
-  }
-  const byQ = {};
-  document.querySelectorAll('.pg[data-q]').forEach(p => (byQ[p.dataset.q] ??= []).push(p));
-  for (const ps of Object.values(byQ)) if (ps.length % 2) { const b = document.createElement('div'); b.className = 'pg'; b.innerHTML = '<div class=sub>메모</div>'; ps.at(-1).after(b); }
+    guard = 0;
+    while (back.scrollHeight > back.clientHeight + 1 && guard++ < 20) {
+      const vr = back.querySelectorAll('table.voc tr');
+      if (vr.length <= 3) break;                                    // 머리글 + 2줄까지만 줄인다
+      vr[vr.length - 1].remove();
+    }
+    if (back.scrollHeight > back.clientHeight + 1) back.querySelectorAll('table.snt td.ko').forEach(td => { td.style.height = '7mm'; });   // 그래도 넘치면(장문) 해석 줄을 조금 낮춘다
+  });
 }"""
 
 CSS = """
@@ -77,7 +76,7 @@ ol.cause{columns:2;column-gap:8mm;margin:0;padding-left:0;list-style:none;font-s
 .noprint{text-align:center;margin:10px;font-size:13px}
 .chk{font-size:11.5px;line-height:1.7} .chk div{border-bottom:1px dotted #cbd5e1} .chk u{display:inline-block;min-width:9mm;border-bottom:1px solid #777;text-decoration:none}
 table.voc td{height:9mm} .box ol.cause{columns:1} .box .sec{margin:4px 0 2px}
-.pg[data-en]>*{flex-shrink:0}   /* 문항 그림·표가 쪽 높이에 맞춰 줄어들지 않게 — 넘쳐야 paginateEn이 다음 쪽으로 옮긴다 */
+.pg[data-en]>*:not(.ebs){flex-shrink:0} .pg[data-en] .ebs{flex:1 1 auto;min-height:18mm;margin-top:5px}   /* 그림·표는 줄어들지 않고(넘쳐야 paginateEn이 옮긴다), EBS 칸만 남는 자리에 맞춤 */
 table.snt td{vertical-align:top;text-align:left;padding:2px 5px} table.snt td.n{width:7mm;text-align:center;color:#6b7280} table.snt td.en{font-family:Georgia,"Times New Roman",serif;font-size:10.5px;line-height:1.35} table.snt td.ko{height:9mm;background:#fbfcfe}
 """
 
@@ -152,15 +151,15 @@ def build(folder, wrong, mine=None, sid="", name="", out=None, units=None, leap=
         top = (f"<div class=top><div class=qimg>{imgs}</div><div class=box><div class=t>읽기 점검<small>어디서 막혔고, 글이 무엇을 말하는지</small></div>{chk}"
                f"<div class=conf><b style='color:#1e3a5f'>그때 확신도</b> &nbsp;<span>○ 확신</span><span>○ 반반</span><span>○ 찍음</span></div>"
                f"<div class=sec>원인 유형 <small>✓ 2개까지 · 표지에 옮겨 적기</small></div><ol class=cause>{cause}</ol></div></div>")
-        tail = ("<div class=sec>단어·관용어 <small>사전 뜻과 지문 속 예시 문장을 함께</small></div><table class=voc><tr><th class=l style='width:30%'>단어·관용어</th><th class=l style='width:30%'>사전 뜻</th><th class=l>지문 속 구절 (예시 문장)</th></tr>"
+        tail = ("<div class=cont></div><div class=sec>단어·관용어 <small>사전 뜻과 지문 속 예시 문장을 함께</small></div><table class=voc><tr><th class=l style='width:30%'>단어·관용어</th><th class=l style='width:30%'>사전 뜻</th><th class=l>지문 속 구절 (예시 문장)</th></tr>"
                 + "<tr><td></td><td></td><td></td></tr>" * 10 + "</table>"
-                "<div class=boxes style='margin-top:5px;min-height:30mm'><div class=box><div class=t>EBS 오답 강의 정리<small>강의에서 짚은 포인트 · 내가 몰랐던 것 · 다시 풀어 본 결과</small></div><div class=lines>" + "<i></i>" * 7 + "</div></div></div>")
+                "<div class='boxes ebs'><div class=box><div class=t>EBS 오답 강의 정리<small>강의에서 짚은 포인트 · 내가 몰랐던 것 · 다시 풀어 본 결과</small></div><div class=lines>" + "<i></i>" * 7 + "</div></div></div>")
         sents = q.get("sentences") or (ps.get(q.get("passage")) or {}).get("sentences") or []
         rows = "".join(f"<tr><td class=n rowspan=2>{r + 1}</td><td class=en>{html.escape(x)}</td></tr><tr><td class=ko></td></tr>" for r, x in enumerate(sents))
         tbl = f"<div class=sec>지문 해석 — 한 문장씩 <small>끊긴 문장부터 · 사전 없이 먼저 쓰고 해설지 해석과 비교해 틀린 곳에 표시</small></div><table class=snt><tr><th style='width:7mm'></th><th class=l>문장 / 내 해석</th></tr>{rows}</table>" if sents else ""
-        # 앞면: 문항 + 읽기 점검 + 문장 전부. 넘치는 문장은 paginateEn()(브라우저)이 실제 높이를 재서 다음 쪽으로 옮긴다. 뒷면: 단어·관용어 + EBS
+        # 앞면: 문항 + 읽기 점검 + 문장 전부. 넘치는 문장은 paginateEn()(브라우저)이 실제 높이를 재서 뒷면 맨 위로 옮긴다. 뒷면: (이어서) + 단어·관용어 + EBS
         return (hd().replace("<div class=pg>", f"<div class=pg data-en=1 data-q={no}>", 1) + top + tbl + "</div>"
-                + hd(" · 단어·관용어 / EBS").replace("<div class=pg>", f"<div class=pg data-q={no}>", 1) + tail + "</div>")
+                + hd(" · 단어·관용어 / EBS").replace("<div class=pg>", f"<div class=pg data-en=1 data-back=1 data-q={no}>", 1) + tail + "</div>")
 
     body, done = [], set()
     for no in wrong:
