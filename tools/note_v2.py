@@ -86,9 +86,11 @@ def build(folder, wrong, mine=None, sid="", name="", out=None, units=None, leap=
     else:
         what = '읽기가 끊긴 곳을 찾고, 지문을 해석하고, 단어를 정리하고' if subj == '영어' else '선지별로 왜 맞고 틀리는지 적고'
         head = f"<h1>{title} 오답노트</h1><div class=sub>오답 {len(wrong)}문항{' (듣기 제외)' if subj == '영어' else ''} · 문항마다 한 쪽: {what}, 원인 유형을 고르고, 해설과 EBS 강의 내용을 내 말로 정리한다.</div>"
+    sheet = subj == "영어"   # 한 문항 = 한 장(양면). 표지·지문 쪽은 짝수로 맞춰 문항이 늘 앞면에서 시작하게 한다
+    BLANK = "<div class=pg><div class=sub>메모</div></div>"
     cover = (f"<div class=pg><div class=who>학년/반/번호 <span>{html.escape(sid)}</span> 이름 <span>{html.escape(name)}</span></div>{head}"
              f"<table><tr><th>번호</th><th class=l>영역</th><th>배점</th><th>전국 정답률</th>{refcol}<th>내 답</th><th>정답</th><th>그때 확신도</th><th>원인 번호</th></tr>{rows}</table>"
-             f"<p class=sub style='margin-top:8px'>전국 정답률은 성적통지표 구간(A 80% 이상 … E 20% 미만). '확신'인데 틀린 문항부터 정리한다.</p></div>")
+             f"<p class=sub style='margin-top:8px'>전국 정답률은 성적통지표 구간(A 80% 이상 … E 20% 미만). '확신'인데 틀린 문항부터 정리한다.</p></div>" + (BLANK if sheet else ""))
 
     def card(no):
         q = qs[no]; area = area_of(no)
@@ -127,8 +129,10 @@ def build(folder, wrong, mine=None, sid="", name="", out=None, units=None, leap=
                 f"<div class=conf><b style='color:#1e3a5f'>그때 확신도</b> &nbsp;<span>○ 확신</span><span>○ 반반</span><span>○ 찍음</span></div>"
                 f"<div class=sec>원인 유형 <small>✓ 2개까지 · 표지에 옮겨 적기</small></div><ol class=cause>{cause}</ol></div></div>"
                 f"<div class=boxes><div class=box><div class=t>지문 해석<small>끊긴 문장부터 — 사전 없이 먼저 쓰고, 해설지 해석과 비교해 틀린 곳에 표시</small></div><div class=lines>" + "<i></i>" * 9 + "</div></div></div>"
-                f"<div class=sec>단어·관용어 <small>사전 뜻과 지문 속 예시 문장을 함께</small></div>{voc}"
-                f"<div class=boxes style='flex:none;height:24mm'><div class=box><div class=t>EBS 오답 강의 정리<small>강의에서 짚은 포인트·내가 몰랐던 것</small></div><div class=lines>" + "<i></i>" * 3 + "</div></div></div></div>")
+                f"<div class=sec>단어·관용어 <small>사전 뜻과 지문 속 예시 문장을 함께</small></div>{voc}</div>"
+                # 뒷면: EBS 오답 강의 정리 한 쪽 (한 문항 = 한 장 양면)
+                f"<div class=pg><div class=hd>{no}번 <span class=tag>EBS 오답 강의 정리</span><span class=ans>강의에서 짚은 포인트 · 내가 몰랐던 것 · 다시 풀어 본 결과</span></div>"
+                f"<div class=boxes style='margin-top:5px'><div class=box><div class=lines>" + "<i></i>" * 28 + "</div></div></div></div>")
 
     body, done = [], set()
     for no in wrong:
@@ -146,6 +150,7 @@ def build(folder, wrong, mine=None, sid="", name="", out=None, units=None, leap=
                 imgs = "".join(f'<img src="{f}">' for f in pieces[i:i + 2])
                 more = f" ({i // 2 + 1}/{(len(pieces) + 1) // 2})" if len(pieces) > 2 else ""
                 body.append(f"<div class='pg psg'><h2>지문 [{q['passage']}]{more}</h2><div class=note>이 지문에서 틀린 문항: {', '.join(map(str, in_set))}번</div><div class=pieces>{imgs}</div></div>")
+            if sheet and (len(pieces) + 1) // 2 % 2: body.append(BLANK)   # 지문 쪽이 홀수면 뒷면을 빈 쪽으로 채워 짝수로
         body.append(card(no))
 
     wrap = ("<div class='pg wrap'><h1>시험 성찰</h1><div class=sub>이 회차 전체를 돌아보는 한 쪽. 오답노트를 다 쓴 뒤에 적는다.</div>"

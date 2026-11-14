@@ -67,8 +67,10 @@ function cardEn(i, q, hd, tagList) {
     `<div class=conf><b style="color:#1e3a5f">그때 확신도</b> &nbsp;<span>○ 확신</span><span>○ 반반</span><span>○ 찍음</span></div>` +
     `<div class=sec>원인 유형 <small>✓ 2개까지 · 표지에 옮겨 적기</small></div><ol class=cause>${tagList.map((t, k) => `<li>□ ${k + 1}. ${esc(t)}</li>`).join('')}</ol></div></div>` +
     `<div class=boxes><div class=box><div class=t>지문 해석<small>끊긴 문장부터 — 사전 없이 먼저 쓰고, 해설지 해석과 비교해 틀린 곳에 표시</small></div>${lines(9)}</div></div>` +
-    `<div class=sec>단어·관용어 <small>사전 뜻과 지문 속 예시 문장을 함께</small></div>${voc}` +
-    `<div class=boxes style="flex:none;height:24mm"><div class=box><div class=t>EBS 오답 강의 정리<small>강의에서 짚은 포인트·내가 몰랐던 것</small></div>${lines(3)}</div></div></div>`;
+    `<div class=sec>단어·관용어 <small>사전 뜻과 지문 속 예시 문장을 함께</small></div>${voc}</div>` +
+    // 뒷면: EBS 오답 강의 정리 한 쪽 (한 문항 = 한 장 양면)
+    `<div class=pg><div class=hd>${i.q_no}번 <span class=tag>EBS 오답 강의 정리</span><span class=ans>강의에서 짚은 포인트 · 내가 몰랐던 것 · 다시 풀어 본 결과</span></div>` +
+    `<div class=boxes style="margin-top:5px"><div class=box>${lines(28)}</div></div></div>`;
 }
 let IMG = f => '';
 
@@ -93,6 +95,7 @@ let IMG = f => '';
   const title = `${d.exam.slice(0, 4)}학년도 ${+d.exam.slice(5)}월 고${d.grade} 전국연합학력평가 ${subj}`;
   const sid = `${d.grade}-${d.class_no}-${d.student_no}`;
   const sepPassage = subj === '국어' || subj === '영어';
+  const sheet = subj === '영어', BLANK = '<div class=pg><div class=sub>메모</div></div>';   // 한 문항 = 한 장(양면): 표지·지문 쪽을 짝수로 맞춘다
   const items = d.items.filter(i => qs[i.q_no] && !(subj === '영어' && i.q_no <= 17));   // 영어 듣기(1~17)는 오답노트에서 뺀다
   const area = i => i.area || subj, tags = i => TAGS[area(i)] || TAGS[subj] || [];
   const imgH = f => new Promise(res => { const im = new Image(); im.onload = () => res(im.naturalHeight); im.onerror = () => res(0); im.src = base + encodeURIComponent(f).replace(/%2F/g, '/'); });
@@ -108,7 +111,7 @@ let IMG = f => '';
     : `<h1>${esc(title)} 오답노트</h1><div class=sub>오답 ${items.length}문항${subj === '영어' ? ' (듣기 제외)' : ''} · 문항마다 한 쪽: ${subj === '영어' ? '읽기가 끊긴 곳을 찾고, 지문을 해석하고, 단어를 정리하고' : '선지별로 왜 맞고 틀리는지 적고'}, 원인 유형을 고르고, 해설과 EBS 강의 내용을 내 말로 정리한다.</div>`;
   let html = `<div class=pg><div class=who>학년/반/번호 <span>${esc(sid)}</span> 이름 <span>&nbsp;</span></div>${head}` +
     `<table><tr><th>번호</th><th class=l>영역</th><th>배점</th><th>전국 정답률</th>${refcol}<th>내 답</th><th>정답</th><th>그때 확신도</th><th>원인 번호</th></tr>${rows}</table>` +
-    `<p class=sub style="margin-top:8px">전국 정답률은 성적통지표 구간(A 80% 이상 … E 20% 미만). '확신'인데 틀린 문항부터 정리한다.</p></div>`;
+    `<p class=sub style="margin-top:8px">전국 정답률은 성적통지표 구간(A 80% 이상 … E 20% 미만). '확신'인데 틀린 문항부터 정리한다.</p></div>` + (sheet ? BLANK : '');
 
   // 지문 쪽 + 문항 쪽
   const done = new Set();
@@ -122,6 +125,7 @@ let IMG = f => '';
         const more = pieces.length > 2 ? ` (${k / 2 + 1}/${Math.ceil(pieces.length / 2)})` : '';
         html += `<div class="pg psg"><h2>지문 [${esc(q.passage)}]${more}</h2><div class=note>이 지문에서 틀린 문항: ${inSet.join(', ')}번</div><div class=pieces>${pieces.slice(k, k + 2).map(img).join('')}</div></div>`;
       }
+      if (sheet && Math.ceil(pieces.length / 2) % 2) html += BLANK;   // 지문 쪽이 홀수면 뒷면을 빈 쪽으로 채워 짝수로
     }
     const ans = String(i.answer ?? ''), my = circ(i.marked), isMc = CIRC.includes(ans) && ans;
     const kind = /않은/.test(q.text || '') ? '적절하지 않은 것 (정답 1개가 왜 틀렸고 나머지는 왜 맞는지)' : '가장 적절한 것 (나머지 4개가 왜 틀렸는지)';
