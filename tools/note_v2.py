@@ -20,7 +20,6 @@ TAGS = {
     "국어": ["지문 오독", "선지 오독", "<보기> 적용 실패", "개념 부족", "시간 부족", "찍음"],
     "수학": ["문제 읽기(조건 누락)", "무엇을 구하는지 오해", "식 세우기 실패", "계산·절차 실수", "답 표기(단답형)", "개념 모름", "공식 혼동", "시간 부족"],
     "영어": ["어휘: 핵심 단어 뜻을 모름", "구문: 긴 문장 구조를 못 봄", "논리: 주제·흐름을 놓침", "선지 덫: 부분 일치·과장", "유형 전략 없음(빈칸·순서·삽입·어법)", "시간 부족·대충 읽음"],
-    "영어·듣기": ["핵심 어휘를 못 들음", "숫자·고유명사를 놓침", "선지를 미리 읽지 않음", "우리말로 번역하다 뒤를 놓침", "집중이 끊김", "찍음"],
     "사회": ["개념 혼동", "사례→개념 연결 실패", "자료(표·그래프) 해석 실패", "보기 ㄱㄴㄷ 중 하나 오판", "사상가·관점 혼동", "시간 부족"],
     "과학": ["개념 모름", "개념 혼동", "자료·실험 해석 실패", "계산·단위 실수", "보기 ㄱㄴㄷ 중 하나 오판", "조건(단, ~) 누락"],
     "한국사": ["시기 혼동", "인물·사건 연결 실패", "사료 해석 실패", "선지 키워드 함정", "지도·자료 읽기 실패"],
@@ -55,8 +54,7 @@ ol.cause{columns:2;column-gap:8mm;margin:0;padding-left:0;list-style:none;font-s
 .wrap h2{font-size:14px;color:#1e3a5f;margin:12px 0 5px} .wrap .box2{border:1px solid #cbd5e1;border-radius:4px;min-height:34mm;padding:6px;color:#6b7280;font-size:11px}
 .noprint{text-align:center;margin:10px;font-size:13px}
 .chk{font-size:11.5px;line-height:1.7} .chk div{border-bottom:1px dotted #cbd5e1} .chk u{display:inline-block;min-width:9mm;border-bottom:1px solid #777;text-decoration:none}
-table.voc td{height:7.5mm} table.ch.en td{height:7mm}
-.sol{display:flex;gap:3mm;align-items:flex-start} .sol img{width:60mm;max-height:95mm;object-fit:contain;object-position:top left;display:block}
+table.voc td{height:7.5mm}
 """
 
 
@@ -71,7 +69,8 @@ def build(folder, wrong, mine=None, sid="", name="", out=None, units=None, leap=
     area_of = lambda no: U.get(no, {}).get("area") or subj
     for no, u in U.items():
         if no in qs and u.get("nat"): qs[no]["nat"] = u["nat"]
-    tags_of = lambda no: TAGS["영어·듣기"] if subj == "영어" and no <= 17 else (TAGS.get(area_of(no)) or TAGS.get(subj) or [])
+    tags_of = lambda no: TAGS.get(area_of(no)) or TAGS.get(subj) or []
+    if subj == "영어": wrong = [n for n in wrong if n > 17]   # 듣기(1~17)는 오답노트에서 뺀다
     sep_passage = subj in ("국어", "영어")
     is_mc = lambda q: str(q.get("answer", "")) in CIRC.values()
 
@@ -85,7 +84,8 @@ def build(folder, wrong, mine=None, sid="", name="", out=None, units=None, leap=
         head = (f"<h1>{title} 오답노트 — 1등급 업</h1><div class=sub>내 원점수 {num(leap['my_score'])}점 · <b>{leap['my_grade']}등급</b> → 목표 <b>{leap['target_grade']}등급</b> (기준 집단 {leap['ref_n']}명). "
                 f"기준 집단은 대부분 맞히는데 내가 틀린 문항 {len(wrong)}개를 그 정답률 순으로 모았다. 이 문항들을 잡으면 한 등급이 오른다.</div>")
     else:
-        head = f"<h1>{title} 오답노트</h1><div class=sub>오답 {len(wrong)}문항 · 문항마다 한 쪽: 선지별로 왜 맞고 틀리는지 적고, 원인 유형을 고르고, 해설과 EBS 강의 내용을 내 말로 정리한다.</div>"
+        what = '읽기가 끊긴 곳을 찾고, 지문을 해석하고, 단어를 정리하고' if subj == '영어' else '선지별로 왜 맞고 틀리는지 적고'
+        head = f"<h1>{title} 오답노트</h1><div class=sub>오답 {len(wrong)}문항{' (듣기 제외)' if subj == '영어' else ''} · 문항마다 한 쪽: {what}, 원인 유형을 고르고, 해설과 EBS 강의 내용을 내 말로 정리한다.</div>"
     cover = (f"<div class=pg><div class=who>학년/반/번호 <span>{html.escape(sid)}</span> 이름 <span>{html.escape(name)}</span></div>{head}"
              f"<table><tr><th>번호</th><th class=l>영역</th><th>배점</th><th>전국 정답률</th>{refcol}<th>내 답</th><th>정답</th><th>그때 확신도</th><th>원인 번호</th></tr>{rows}</table>"
              f"<p class=sub style='margin-top:8px'>전국 정답률은 성적통지표 구간(A 80% 이상 … E 20% 미만). '확신'인데 틀린 문항부터 정리한다.</p></div>")
@@ -114,32 +114,21 @@ def build(folder, wrong, mine=None, sid="", name="", out=None, units=None, leap=
                 f"<div class=boxes><div class=box><div class=t>EBS 오답 강의 정리<small>강의에서 짚은 포인트·내가 몰랐던 것</small></div><div class=lines>{'<i></i>' * 6}</div></div></div></div>")
 
     def card_en(no, q, meta, nat, psg, imgs, ans, my, choices, cause):
-        """영어: 듣기(1~17)는 대본 + 들을 때 한 일 점검, 독해는 읽기 점검(끊긴 지점·한 줄 요약·근거 문장) + 어휘·구문 정리.
-        근거: 이해 점검(comprehension monitoring)·MARSI 문제해결 전략·MALQ(계획/번역/주의) — docs/오답노트_양식_제안.md 4-3"""
-        hd = (f"<div class=pg><div class=hd>{no}번 <span class=tag>{num(q.get('points'))}점 · {meta}{nat}</span>{psg}"
-              f"<span class=ans>내 답<b>{my or '&nbsp;'}</b> 정답<b>{ans or '&nbsp;'}</b></span></div>")
-        conf = "<div class=conf><b style='color:#1e3a5f'>그때 확신도</b> &nbsp;<span>○ 확신</span><span>○ 반반</span><span>○ 찍음</span></div>"
-        causes = f"<div class=sec>원인 유형 <small>해당 번호에 ✓ (2개까지) · 표지의 '원인 번호' 칸에 옮겨 적기</small></div><ol class=cause>{cause}</ol>"
-        ebs = "<div class=boxes><div class=box><div class=t>EBS 오답 강의 정리<small>강의에서 짚은 포인트·내가 몰랐던 것</small></div><div class=lines>" + "<i></i>" * 5 + "</div></div></div></div>"
-        if no <= 17:
-            sol = "".join(f'<img src="{f}">' for f in q.get("sol_images", []))
-            chk = ("<div class=chk><div>□ 듣기 전에 선지를 읽고 상황·화자를 예측했다</div><div>□ 우리말로 번역하면서 들었다 → 뒤를 놓치는 원인</div>"
-                   "<div>□ 한 단어에 걸려 다음 문장을 놓쳤다</div><div>□ 숫자·이름·장소를 메모했다</div><div>□ 못 들은 부분을 앞뒤 내용으로 메웠다</div></div>")
-            voc = "<table class=voc><tr><th class=l>못 들은 단어·표현</th><th class=l>들린 대로</th><th class=l>뜻</th></tr>" + "<tr><td></td><td></td><td></td></tr>" * 3 + "</table>"
-            return (hd + f"<div class=top style='min-height:0'><div class=qimg>{imgs}</div><div class=box><div class=t>들을 때 한 일<small>해당하는 것에 ✓</small></div>{chk}</div></div>"
-                    f"<div class=sec>대본 <small>해설지 대본을 보고 답이 결정된 문장에 밑줄</small></div>"
-                    f"<div class=sol>{sol}</div><div class=box style='flex:none;margin-top:3px'><div class=t>답이 결정된 문장<small>대본에서 찾아 베껴 쓰기</small></div><div class=lines>" + "<i></i>" * 3 + f"</div></div>"
-                    f"<div class=sec>못 들은 표현 <small>듣고 → 대본으로 확인</small></div>{voc}{conf}{causes}{ebs}")
+        """영어 독해: 읽기 점검(끊긴 지점·한 줄 요약·근거 문장·유형 전략) + 지문 해석 + 단어(추측→사전) + 원인·EBS. 듣기는 제외.
+        근거: 이해 점검(comprehension monitoring)·MARSI 문제해결 전략 — docs/오답노트_양식_제안.md 4-3"""
         chk = ("<div class=chk><div>① 이해가 끊긴 문장: <u></u>번째 → 이유 ○단어 ○구조 ○앞뒤 연결</div>"
                "<div>② 이 글을 우리말 한 문장으로</div><div>&nbsp;</div><div>&nbsp;</div>"
                "<div>③ 정답 근거 문장: <u></u>번째 · 내 답과 충돌하는 문장: <u></u>번째</div>"
                "<div>④ 이 유형을 푸는 순서(내 전략)</div><div>&nbsp;</div><div>&nbsp;</div></div>")
-        voc = ("<table class=voc><tr><th class=l>단어·표현</th><th class=l>문맥에서 추측한 뜻</th><th class=l>사전 뜻</th><th class=l>지문 속 구절</th></tr>" + "<tr><td></td><td></td><td></td><td></td></tr>" * 3 + "</table>")
-        syn = "<div class=box><div class=t>구문<small>가장 어려웠던 문장 하나: 베끼고 / 로 끊고 S·V 표시 → 우리말</small></div><div class=lines>" + "<i></i>" * 5 + "</div></div>"
-        return (hd + f"<div class=top><div class=qimg>{imgs}</div><div class=box><div class=t>읽기 점검<small>어디서 막혔고, 글이 무엇을 말하는지</small></div>{chk}</div></div>"
-                + choices.replace("class=ch>", "class='ch en'>").replace("이 선지가 맞는/틀린 이유 (지문·조건의 근거)", "맞는/틀린 이유 + 근거 문장 번호") +
-                f"<div class=sec>어휘·구문 <small>추측한 뜻을 먼저 쓰고 사전으로 확인 · 구문은 문장 하나를 완전히</small></div>"
-                f"<div class=boxes style='flex:none'><div style='flex:1.3'>{voc}</div>{syn}</div>{conf}{causes}{ebs}")
+        voc = ("<table class=voc><tr><th class=l>단어·표현</th><th class=l>문맥에서 추측한 뜻</th><th class=l>사전 뜻</th><th class=l>지문 속 구절</th></tr>" + "<tr><td></td><td></td><td></td><td></td></tr>" * 5 + "</table>")
+        return (f"<div class=pg><div class=hd>{no}번 <span class=tag>{num(q.get('points'))}점 · {meta}{nat}</span>{psg}"
+                f"<span class=ans>내 답<b>{my or '&nbsp;'}</b> 정답<b>{ans or '&nbsp;'}</b></span></div>"
+                f"<div class=top><div class=qimg>{imgs}</div><div class=box><div class=t>읽기 점검<small>어디서 막혔고, 글이 무엇을 말하는지</small></div>{chk}</div></div>"
+                f"<div class=boxes><div class=box><div class=t>지문 해석<small>끊긴 문장부터 — 사전 없이 먼저 쓰고, 해설지 해석과 비교해 틀린 곳에 표시</small></div><div class=lines>" + "<i></i>" * 9 + "</div></div></div>"
+                f"<div class=sec>단어 <small>추측한 뜻을 먼저 쓰고 사전으로 확인 · 지문 속 구절과 함께</small></div>{voc}"
+                f"<div class=conf><b style='color:#1e3a5f'>그때 확신도</b> &nbsp;<span>○ 확신</span><span>○ 반반</span><span>○ 찍음</span></div>"
+                f"<div class=sec>원인 유형 <small>해당 번호에 ✓ (2개까지) · 표지의 '원인 번호' 칸에 옮겨 적기</small></div><ol class=cause>{cause}</ol>"
+                f"<div class=boxes style='flex:none;height:24mm'><div class=box><div class=t>EBS 오답 강의 정리<small>강의에서 짚은 포인트·내가 몰랐던 것</small></div><div class=lines>" + "<i></i>" * 3 + "</div></div></div></div>")
 
     body, done = [], set()
     for no in wrong:
