@@ -12,6 +12,7 @@ from crop_exam import tight, lines, frame, detect_margins, col_rects, PAD, MARGI
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 RE_Q = re.compile(r"^(\d{1,2})(?:\s*[~～∼]\s*(\d{1,2}))?\s*[.．]?\s*\[[출츨]제\s*의도\]\s*(.*)")  # '츨제의도' 오타(2025-03 국어 20번)도 받음
+RE_SET = re.compile(r"^\[?\s*(\d{1,2})\s*[~～∼]\s*(\d{1,2})\s*(?:\]|[가-힣\[])")  # "16~17 긴 담화 듣기", "[16 ~ 17]", "43∼45 장문의 이해 [해석]": 묶음 공용 대본·해석 → 그 범위 문항 모두에 앞에 붙임
 RE_SECTION = re.compile(r"^\[[^\]]*[가-힣][^\]]*\]\s*$")  # 영역 제목 "[화법]": 한글이 들어가고 단 가운데쯤(여백에서 30pt 이상 안쪽). 듣기 지문의 "[Telephone rings.]"는 제외
 RE_ANS = re.compile(r"^[①②③④⑤]$|^\d{1,3}$")
 # 수학 해설지의 수식 글꼴은 숫자·기호가 사용자 영역 글자(U+E034…)로 박혀 있다. 2026-10 고2 정답표로 대조해 확인한 대응표.
@@ -68,6 +69,12 @@ def crop(pdf, folder, zoom=2.5):
                     segments.append(cur)
                     expect = nos[-1] + 1
                     y = ly0 - 2
+                elif (ms := RE_SET.match(t)) and int(ms[1]) == expect and abs(lx0 - margin) <= 12:  # 묶음 머리글: 공용 블록 시작(expect는 그대로)
+                    if cur:
+                        cur["pieces"].append((pno, pymupdf.Rect(rect.x0, y, rect.x1, ly0 - 2)))
+                    cur = {"nos": list(range(int(ms[1]), int(ms[2]) + 1)), "intent": "", "pieces": [], "set": True}
+                    segments.append(cur)
+                    y = ly0 - 2
                 elif RE_SECTION.match(t) and lx0 - margin > 30:  # 영역 제목: 직전 해설 끝
                     if cur:
                         cur["pieces"].append((pno, pymupdf.Rect(rect.x0, y, rect.x1, ly0 - 2)))
@@ -75,20 +82,23 @@ def crop(pdf, folder, zoom=2.5):
             if cur:
                 cur["pieces"].append((pno, pymupdf.Rect(rect.x0, y, rect.x1, rect.y1)))
 
-    mat, by_no = pymupdf.Matrix(zoom, zoom), {q["no"]: q for q in mf["questions"]}
+    mat, by_no, shared = pymupdf.Matrix(zoom, zoom), {q["no"]: q for q in mf["questions"]}, {}
     for seg in segments:
         files, text = [], ""
         for pno, rect in seg["pieces"]:
             t = tight(doc[pno], rect)
             if not t or t.height < 12:
                 continue
-            name = f"q{seg['nos'][0]:02d}" + (f"_{len(files) + 1}" if files else "") + ".png"
+            name = (f"set{seg['nos'][0]:02d}" if seg.get("set") else f"q{seg['nos'][0]:02d}") + (f"_{len(files) + 1}" if files else "") + ".png"
             doc[pno].get_pixmap(matrix=mat, clip=t).save(os.path.join(folder, "sol", name))
             files.append("sol/" + name)
             text += doc[pno].get_text(clip=t).translate(PUA)
         for no in seg["nos"]:
-            if no in by_no:
-                by_no[no].update({"intent": seg["intent"], "sol_images": files, "sol_text": " ".join(text.split())})
+            if seg.get("set"):
+                shared[no] = (files, text)
+            elif no in by_no:
+                sf, st = shared.get(no, ([], ""))
+                by_no[no].update({"intent": seg["intent"], "sol_images": sf + files, "sol_text": " ".join((st + " " + text).split())})
     for no, a in ans.items():
         if no in by_no:
             by_no[no]["answer"] = a

@@ -30,7 +30,10 @@ ol.cause{columns:2;column-gap:8mm;margin:0;padding-left:0;list-style:none;font-s
 .box .t{font-weight:700;color:#1e3a5f;font-size:11.5px;margin-bottom:2px} .box .t small{font-weight:normal;color:#6b7280;margin-left:4px}
 .box .lines{flex:1;display:flex;flex-direction:column;justify-content:space-between} .box .lines i{display:block;border-bottom:1px solid #cbd5e1;height:0}
 .wrap h2{font-size:14px;color:#1e3a5f;margin:12px 0 5px} .wrap .box2{border:1px solid #cbd5e1;border-radius:4px;min-height:34mm;padding:6px;color:#6b7280;font-size:11px}
-.noprint{text-align:center;margin:10px;font-size:13px} .noprint button{padding:6px 14px}
+.noprint{text-align:center;margin:10px;font-size:13px}
+.chk{font-size:11.5px;line-height:1.7} .chk div{border-bottom:1px dotted #cbd5e1} .chk u{display:inline-block;min-width:9mm;border-bottom:1px solid #777;text-decoration:none}
+table.voc td{height:7.5mm} table.ch.en td{height:7mm}
+.sol{display:flex;gap:3mm;align-items:flex-start} .sol img{width:60mm;max-height:95mm;object-fit:contain;object-position:top left;display:block} .noprint button{padding:6px 14px}
 .err{max-width:186mm;margin:40px auto;background:#fff;padding:20px;border-radius:6px;color:#b91c1c}
 </style>
 <body>
@@ -44,7 +47,8 @@ const TAGS = {
   '문법': ['개념을 모름', '개념 둘을 혼동', '개념은 아는데 예시 적용 실패', '<보기> 설명을 잘못 읽음'],
   '국어': ['지문 오독', '선지 오독', '<보기> 적용 실패', '개념 부족', '시간 부족', '찍음'],
   '수학': ['문제 읽기(조건 누락)', '무엇을 구하는지 오해', '식 세우기 실패', '계산·절차 실수', '답 표기(단답형)', '개념 모름', '공식 혼동', '시간 부족'],
-  '영어': ['어휘를 모름', '구문(문장 구조) 해석 실패', '글의 논리(주제·흐름) 놓침', '선지 덫(부분 일치)', '유형별 전략 없음', '시간 부족'],
+  '영어': ['어휘: 핵심 단어 뜻을 모름', '구문: 긴 문장 구조를 못 봄', '논리: 주제·흐름을 놓침', '선지 덫: 부분 일치·과장', '유형 전략 없음(빈칸·순서·삽입·어법)', '시간 부족·대충 읽음'],
+  '영어·듣기': ['핵심 어휘를 못 들음', '숫자·고유명사를 놓침', '선지를 미리 읽지 않음', '우리말로 번역하다 뒤를 놓침', '집중이 끊김', '찍음'],
   '사회': ['개념 혼동', '사례→개념 연결 실패', '자료(표·그래프) 해석 실패', '보기 ㄱㄴㄷ 중 하나 오판', '사상가·관점 혼동', '시간 부족'],
   '과학': ['개념 모름', '개념 혼동', '자료·실험 해석 실패', '계산·단위 실수', '보기 ㄱㄴㄷ 중 하나 오판', '조건(단, ~) 누락'],
   '한국사': ['시기 혼동', '인물·사건 연결 실패', '사료 해석 실패', '선지 키워드 함정', '지도·자료 읽기 실패'],
@@ -55,6 +59,30 @@ const circ = v => (v == null || v === '') ? '' : (CIRC[+v] ?? String(v));
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const num = v => v == null ? '' : (+v % 1 ? String(+v) : String(Math.round(+v)));
 const lines = n => '<div class=lines>' + '<i></i>'.repeat(n) + '</div>';
+
+// 영어: 듣기(1~17)는 대본 + 들을 때 한 일(MALQ), 독해는 읽기 점검(이해 점검·한 줄 요약·근거 문장·유형 전략) + 어휘(추측→사전)·구문. docs/오답노트_양식_제안.md 4-3
+function cardEn(i, q, hd, choices, tagList) {
+  const conf = `<div class=conf><b style="color:#1e3a5f">그때 확신도</b> &nbsp;<span>○ 확신</span><span>○ 반반</span><span>○ 찍음</span></div>`;
+  const causes = `<div class=sec>원인 유형 <small>해당 번호에 ✓ (2개까지) · 표지의 '원인 번호' 칸에 옮겨 적기</small></div><ol class=cause>${tagList.map((t, k) => `<li>□ ${k + 1}. ${esc(t)}</li>`).join('')}</ol>`;
+  const ebs = `<div class=boxes><div class=box><div class=t>EBS 오답 강의 정리<small>강의에서 짚은 포인트·내가 몰랐던 것</small></div>${lines(5)}</div></div></div>`;
+  const qimg = q.images.map(IMG).join('');
+  if (i.q_no <= 17) {
+    const chk = `<div class=chk><div>□ 듣기 전에 선지를 읽고 상황·화자를 예측했다</div><div>□ 우리말로 번역하면서 들었다 → 뒤를 놓치는 원인</div><div>□ 한 단어에 걸려 다음 문장을 놓쳤다</div><div>□ 숫자·이름·장소를 메모했다</div><div>□ 못 들은 부분을 앞뒤 내용으로 메웠다</div></div>`;
+    const voc = `<table class=voc><tr><th class=l>못 들은 단어·표현</th><th class=l>들린 대로</th><th class=l>뜻</th></tr>${'<tr><td></td><td></td><td></td></tr>'.repeat(3)}</table>`;
+    return hd + `<div class=top style="min-height:0"><div class=qimg>${qimg}</div><div class=box><div class=t>들을 때 한 일<small>해당하는 것에 ✓</small></div>${chk}</div></div>` +
+      `<div class=sec>대본 <small>해설지 대본을 보고 답이 결정된 문장에 밑줄</small></div>` +
+      `<div class=sol>${(q.sol_images || []).map(IMG).join('')}</div><div class=box style="flex:none;margin-top:3px"><div class=t>답이 결정된 문장<small>대본에서 찾아 베껴 쓰기</small></div>${lines(3)}</div>` +
+      `<div class=sec>못 들은 표현 <small>듣고 → 대본으로 확인</small></div>${voc}${conf}${causes}${ebs}`;
+  }
+  const chk = `<div class=chk><div>① 이해가 끊긴 문장: <u></u>번째 → 이유 ○단어 ○구조 ○앞뒤 연결</div><div>② 이 글을 우리말 한 문장으로</div><div>&nbsp;</div><div>&nbsp;</div>` +
+    `<div>③ 정답 근거 문장: <u></u>번째 · 내 답과 충돌하는 문장: <u></u>번째</div><div>④ 이 유형을 푸는 순서(내 전략)</div><div>&nbsp;</div><div>&nbsp;</div></div>`;
+  const voc = `<table class=voc><tr><th class=l>단어·표현</th><th class=l>문맥에서 추측한 뜻</th><th class=l>사전 뜻</th><th class=l>지문 속 구절</th></tr>${'<tr><td></td><td></td><td></td><td></td></tr>'.repeat(3)}</table>`;
+  const syn = `<div class=box><div class=t>구문<small>가장 어려웠던 문장 하나: 베끼고 / 로 끊고 S·V 표시 → 우리말</small></div>${lines(5)}</div>`;
+  return hd + `<div class=top><div class=qimg>${qimg}</div><div class=box><div class=t>읽기 점검<small>어디서 막혔고, 글이 무엇을 말하는지</small></div>${chk}</div></div>` +
+    choices.replace('class=ch>', 'class="ch en">').replace('이 선지가 맞는/틀린 이유 (지문·조건의 근거)', '맞는/틀린 이유 + 근거 문장 번호') +
+    `<div class=sec>어휘·구문 <small>추측한 뜻을 먼저 쓰고 사전으로 확인 · 구문은 문장 하나를 완전히</small></div><div class=boxes style="flex:none"><div style="flex:1.3">${voc}</div>${syn}</div>${conf}${causes}${ebs}`;
+}
+let IMG = f => '';
 
 (async () => {
   const p = new URLSearchParams(location.search);
@@ -78,8 +106,9 @@ const lines = n => '<div class=lines>' + '<i></i>'.repeat(n) + '</div>';
   const sid = `${d.grade}-${d.class_no}-${d.student_no}`;
   const sepPassage = subj === '국어' || subj === '영어';
   const items = d.items.filter(i => qs[i.q_no]);
-  const area = i => i.area || subj, tags = i => TAGS[area(i)] || TAGS[subj] || [];
-  const img = f => `<img src="${base}${encodeURIComponent(f).replace(/%2F/g, '/')}">`;
+  const area = i => i.area || subj, tags = i => subj === '영어' && i.q_no <= 17 ? TAGS['영어·듣기'] : (TAGS[area(i)] || TAGS[subj] || []);
+  const imgH = f => new Promise(res => { const im = new Image(); im.onload = () => res(im.naturalHeight); im.onerror = () => res(0); im.src = base + encodeURIComponent(f).replace(/%2F/g, '/'); });
+  const img = f => `<img src="${base}${encodeURIComponent(f).replace(/%2F/g, '/')}">`; IMG = img;
 
   // 표지
   const refcol = leap ? '<th>위 등급 정답률</th>' : '';
@@ -97,10 +126,10 @@ const lines = n => '<div class=lines>' + '<i></i>'.repeat(n) + '</div>';
   const done = new Set();
   for (const i of items) {
     const q = qs[i.q_no];
-    if (sepPassage && q.passage && !done.has(q.passage)) {
+    const pieces = sepPassage && q.passage && !done.has(q.passage) ? (ps[q.passage]?.flow || ps[q.passage]?.images || []) : [];
+    if (pieces.length && !(pieces.length === 1 && await imgH(pieces[0]) < 150)) {   // 지시문 한 줄뿐인 세트(영어 [31~34] 등)는 쪽을 만들지 않음
       done.add(q.passage);
       const inSet = items.filter(x => qs[x.q_no].passage === q.passage).map(x => x.q_no);
-      const pieces = ps[q.passage]?.flow || ps[q.passage]?.images || [];
       for (let k = 0; k < pieces.length; k += 2) {
         const more = pieces.length > 2 ? ` (${k / 2 + 1}/${Math.ceil(pieces.length / 2)})` : '';
         html += `<div class="pg psg"><h2>지문 [${esc(q.passage)}]${more}</h2><div class=note>이 지문에서 틀린 문항: ${inSet.join(', ')}번</div><div class=pieces>${pieces.slice(k, k + 2).map(img).join('')}</div></div>`;
@@ -113,7 +142,9 @@ const lines = n => '<div class=lines>' + '<i></i>'.repeat(n) + '</div>';
         CIRC.slice(1).map(c => `<tr class="${c === ans ? 'ok' : ''} ${c === my && c !== ans ? 'me' : ''}"><td>${c}</td><td>${c === ans ? '정답' : c === my ? '내 답' : ''}</td><td class=w></td></tr>`).join('') + '</table>'
       : `<div class=sec>풀이 정리 <small>어디까지 맞았고 어디서 틀렸는지</small></div><table class=ch><tr><td class=w style="height:30mm"></td></tr></table>`;
     const meta = esc(area(i)) + (q.intent ? ' · ' + esc(q.intent) : '') + (NAT[i.nat] ? ` · 전국 ${i.nat} ${NAT[i.nat]}` : '') + (i.ref_rate != null ? ` · 위 등급 정답률 ${Math.round(i.ref_rate * 100)}%` : '');
-    const psg = q.passage && sepPassage ? ` <span class=tag>지문 [${esc(q.passage)}] 쪽 참고</span>` : '';
+    const psg = done.has(q.passage) ? ` <span class=tag>지문 [${esc(q.passage)}] 쪽 참고</span>` : '';
+    const hd = `<div class=pg><div class=hd>${i.q_no}번 <span class=tag>${num(i.points)}점 · ${meta}</span>${psg}<span class=ans>내 답<b>${my || '&nbsp;'}</b> 정답<b>${esc(ans) || '&nbsp;'}</b></span></div>`;
+    if (subj === '영어') { html += cardEn(i, q, hd, choices, tags(i)); continue; }
     html += `<div class=pg><div class=hd>${i.q_no}번 <span class=tag>${num(i.points)}점 · ${meta}</span>${psg}<span class=ans>내 답<b>${my || '&nbsp;'}</b> 정답<b>${esc(ans) || '&nbsp;'}</b></span></div>` +
       `<div class=top><div class=qimg>${q.images.map(img).join('')}</div><div class=box><div class=t>해설 정리<small>해설지를 읽고 핵심 근거·개념을 내 말로</small></div>${lines(12)}</div></div>${choices}` +
       `<div class=conf><b style="color:#1e3a5f">그때 확신도</b> &nbsp;<span>○ 확신</span><span>○ 반반</span><span>○ 찍음</span></div>` +
