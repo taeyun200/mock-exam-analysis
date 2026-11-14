@@ -33,3 +33,16 @@ const erows = [...stu('A', 1, Array(20).fill('1')), ...stu('A', 2, Array(20).fil
 const e = leapItems(score(erows, ekeys), 'A-2-1-2', '영어', cuts);
 assert.deepEqual(e.items.map(i => i.q_no), [18, 19, 20]);
 console.log('test_leap 통과: 등급 산출, 기준 집단(빈 등급 건너뜀), 정렬, 영어 듣기 제외');
+
+// 저장된 표(bandStats)로 계산해도 전체 응답으로 계산한 것과 같아야 한다
+import { bandStats, leapFromStats } from './src/scoring.js';
+const st = bandStats(scored, '국어', cuts);
+assert.equal(st.n_students, 6); assert.deepEqual(st.bands, { 1: 1, 2: 2, 4: 1, 8: 1, 9: 1 });
+assert.deepEqual(st.items[4][2], [2, 1], '4번: 2등급 2명 중 1명 정답');
+const mine = scored.filter(c => c.student_key === 'B-2-1-4');
+const r2 = leapFromStats(st, mine, '국어', 6);
+assert.deepEqual({ s: r2.my_score, g: r2.my_grade, t: r2.target_grade, n: r2.ref_n, q: r2.items.map(i => i.q_no), rr: r2.items.map(i => i.ref_rate) },
+  { s: r.my_score, g: r.my_grade, t: r.target_grade, n: r.ref_n, q: r.items.map(i => i.q_no), rr: r.items.map(i => i.ref_rate) }, '표 기반 결과 = 전체 응답 기반 결과');
+const top2 = leapFromStats(st, scored.filter(c => c.student_key === 'A-2-1-1'), '국어');
+assert.equal(top2.ref_n, 0, '1등급이 기준이면 내 몫을 뺀다');
+console.log('test_leap 통과: 등급별 정답률 표 캐시와 전체 계산 일치');

@@ -79,3 +79,15 @@ create table if not exists ebs_jobs (
   warnings    text,                        -- 미등록 분류·절대평가 컷 불일치 등, 줄바꿈 구분
   primary key (exam_code, grade)
 );
+
+
+-- ── 등급별 문항 정답률 표 캐시 (회차·학년·과목당 1행). 회차를 닫을 때 만들고, 없으면 첫 요청 때 만든다. ──
+-- 오답노트 한 장마다 수십만 행을 다시 읽지 않도록 src/scoring.js bandStats 결과(JSON)를 둔다. 다시 만들려면 행을 지우면 된다.
+create table if not exists stats_cache (
+  exam_code   text not null references exams(exam_code) on delete cascade,
+  grade       integer not null,
+  subject     text not null,
+  computed_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  json        text not null,
+  primary key (exam_code, grade, subject)
+);

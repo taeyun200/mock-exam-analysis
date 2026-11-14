@@ -168,3 +168,40 @@ export function leapItems(scored, studentKey, subject, cuts, n = 6) {
   })).sort((a, b) => (b.ref_rate ?? -1) - (a.ref_rate ?? -1) || a.q_no - b.q_no);
   return { my_score: me.score, my_grade: myGrade, target_grade: target, ref_n: ref.length, items: items.slice(0, n), wrong: items.map(i => i.q_no).sort((a, b) => a - b) };
 }
+
+// ── 등급별 문항 정답률 표 (회차·학년·과목당 한 번 계산해 두고, 오답노트·히트맵이 읽는다) ──
+// 결과: { cuts, n_students, bands: {등급: 인원}, items: {q_no: {all: [응시, 정답], 1: [응시, 정답], …, 9: […]}} }
+export function bandStats(scored, subject, cuts) {
+  const rows = scored.filter(c => c.subject === subject);
+  const score = new Map(), right = new Map();
+  for (const c of rows) {
+    score.set(c.student_key, (score.get(c.student_key) ?? 0) + (c.is_correct ? c.points : 0));
+    if (c.is_correct) (right.get(c.student_key) ?? right.set(c.student_key, new Set()).get(c.student_key)).add(c.q_no);
+  }
+  const band = new Map([...score].map(([k, s]) => [k, gradeOf(s, cuts)]));
+  const bands = {}, items = {};
+  for (const g of band.values()) bands[g] = (bands[g] ?? 0) + 1;
+  for (const c of rows) {
+    const it = items[c.q_no] ??= { all: [0, 0] }, g = band.get(c.student_key);
+    const b = it[g] ??= [0, 0];
+    it.all[0]++; b[0]++;
+    if (c.is_correct) { it.all[1]++; b[1]++; }
+  }
+  return { cuts, n_students: score.size, bands, items };
+}
+
+// 저장된 표 + 학생 본인의 채점 행만으로 도약 문항을 뽑는다 (leapItems 와 같은 규칙, 전체 응답을 다시 읽지 않음).
+export function leapFromStats(stats, myRows, subject, n = 6) {
+  if (!myRows.length) return null;
+  const my_score = myRows.reduce((a, c) => a + (c.is_correct ? c.points : 0), 0);
+  const myGrade = gradeOf(my_score, stats.cuts);
+  let target = myGrade === 1 ? 1 : myGrade - 1;
+  while (target > 1 && !stats.bands[target]) target--;
+  const mine = target === myGrade;   // 1등급이면 기준 집단에 내가 포함되므로 내 몫을 뺀다
+  const items = myRows.filter(c => !c.is_correct && !(subject === '영어' && c.q_no <= 17)).map(c => {
+    const it = stats.items[c.q_no] ?? {}, b = it[target] ?? [0, 0];
+    const bn = b[0] - (mine ? 1 : 0), bc = b[1];
+    return { q_no: c.q_no, marked: c.marked, ref_rate: bn > 0 ? +(bc / bn).toFixed(4) : null, all_rate: it.all ? +(it.all[1] / it.all[0]).toFixed(4) : null };
+  }).sort((a, b) => (b.ref_rate ?? -1) - (a.ref_rate ?? -1) || a.q_no - b.q_no);
+  return { my_score, my_grade: myGrade, target_grade: target, ref_n: (stats.bands[target] ?? 0) - (mine ? 1 : 0), items: items.slice(0, n), wrong: items.map(i => i.q_no).sort((a, b) => a - b) };
+}

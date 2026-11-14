@@ -1,7 +1,7 @@
 // API. 정적 페이지(public/)는 Workers Assets가 먼저 서빙하고, /api/* 만 여기로 온다.
 // 로그인은 학교 ID + 비밀번호. 운영자가 admin.html에서 학교별 ID를 만들어 준다.
 // 권한(자기 학교만 보기)은 RLS 대신 여기서 모든 쿼리에 school_code를 붙여서 지킨다.
-import { SUBJECTS, score, itemStats, distractors, studentScores, schoolSummary, leapItems } from './scoring.js';
+import { SUBJECTS, score, itemStats, distractors, studentScores, schoolSummary, bandStats, leapFromStats } from './scoring.js';
 import { hashPassword, verifyPassword, sign } from './auth.js';
 import { crawlEbs } from './ebs.js';
 
@@ -198,6 +198,8 @@ async function route(method, url, body, me, env, ctx) {
     let pulled = null, pull_error = null;
     if (body.is_open) { try { pulled = await pullKeys(env, x.exam_code); } catch (e) { pull_error = e.message; } }
     await env.DB.prepare('update exams set is_open = ? where exam_code = ?').bind(body.is_open ? 1 : 0, x.exam_code).run();
+    await env.DB.prepare('delete from stats_cache where exam_code = ?').bind(x.exam_code).run();   // 응답이 바뀔 수 있으니 표를 버리고
+    if (body.is_open) ctx.waitUntil(buildStats(env, x.exam_code));                                  // 닫을 때 학년·과목별로 미리 만든다
     return { pulled, pull_error };
   }
 
@@ -300,7 +302,7 @@ async function route(method, url, body, me, env, ctx) {
   }
 
   // 오답노트 재료: 한 학생·한 과목. mode=all(틀린 문항 전부) | leap(1등급 업: 위 등급 집단은 맞히고 나는 틀린 문항, 엑셀 개인성적표 ■6 규칙)
-  // 학교 계정은 자기 학교 학생만. 등급컷은 정답 DB 서버 grade_cuts(EBS), 문항 영역·전국 정답률은 item_units·official_items.
+  // 전체 응답은 읽지 않는다: 등급별 정답률 표(stats_cache, 회차 닫을 때 생성)와 학생 본인 응답(수십 행)만 읽는다.
   if (r === 'GET /note') {
     const x = await exam(q.get('exam')), g = grade(q.get('grade')), sub = subject(q.get('subject'));
     if (!x.is_open) fail(403, '아직 개방되지 않은 회차입니다');
@@ -308,32 +310,58 @@ async function route(method, url, body, me, env, ctx) {
     const cls = int(q.get('class_no')), no = int(q.get('student_no')), mode = q.get('mode') === 'leap' ? 'leap' : 'all';
     const keys = await rows('select subject, q_no, answer, points, q_type, unit from answer_keys where exam_code = ? and grade = ? and subject = ?', x.exam_code, g, sub);
     const raw = await rows(`select s.school_code, s.subject, r.grade, r.class_no, r.student_no, r.q_no, r.marked
-      from responses r join submissions s on s.id = r.submission_id where s.exam_code = ? and s.grade = ? and s.subject = ? and s.is_active = 1`, x.exam_code, g, sub);
-    const scored = score(raw, keys);
+      from responses r join submissions s on s.id = r.submission_id
+      where s.exam_code = ? and s.school_code = ? and s.grade = ? and s.subject = ? and s.is_active = 1 and r.class_no = ? and r.student_no = ?`, x.exam_code, school, g, sub, cls, no);
+    const mine = score(raw, keys);
+    if (!mine.length) fail(404, '해당 학생의 응답이 없습니다');
+    const stats = await getStats(env, x.exam_code, g, sub);
+    if (mode === 'leap' && stats.cut_error) fail(502, '정답 DB 서버에서 등급컷을 받지 못했습니다: ' + stats.cut_error);
+    if (mode === 'leap' && !Object.keys(stats.cuts).length) fail(409, '이 회차·과목의 EBS 등급컷이 아직 없어 1등급 업 문항을 계산할 수 없습니다');
+    const leap = leapFromStats(stats, mine, sub, 6);
     const ex = encodeURIComponent(toExcelExam(x.exam_code)), es = encodeURIComponent(sub);
-    const [cutRows, units, nat] = await Promise.all([
-      sbAll(env, `grade_cuts?select=rank,cut&exam=eq.${ex}&grade=eq.${g}&subject=eq.${es}`).catch(() => []),
+    const [units, nat] = await Promise.all([
       sbAll(env, `item_units?select=q_no,unit,area&exam=eq.${ex}&grade=eq.${g}&subject=eq.${es}`).catch(() => []),
       sbAll(env, `official_items?select=q_no,difficulty&exam=eq.${ex}&grade=eq.${g}&subject=eq.${es}&difficulty=not.is.null`).catch(() => []),
     ]);
-    const cuts = Object.fromEntries(cutRows.map(c => [c.rank, c.cut]));
-    if (!Object.keys(cuts).length && mode === 'leap') fail(409, '이 회차·과목의 EBS 등급컷이 아직 없어 1등급 업 문항을 계산할 수 없습니다');
-    const leap = leapItems(scored, `${school}-${g}-${cls}-${no}`, sub, cuts, 6);
-    if (!leap) fail(404, '해당 학생의 응답이 없습니다');
     const U = Object.fromEntries(units.map(u => [u.q_no, u])), N = Object.fromEntries(nat.map(n => [n.q_no, n.difficulty]));
-    const K = Object.fromEntries(keys.map(k => [k.q_no, k]));
+    const K = Object.fromEntries(keys.map(k => [k.q_no, k])), M = new Map(mine.map(c => [c.q_no, c.marked]));
     const pick = mode === 'leap' ? leap.items.map(i => i.q_no) : leap.wrong;
-    const marks = new Map(scored.filter(c => c.student_key === `${school}-${g}-${cls}-${no}`).map(c => [c.q_no, c.marked]));
     return {
       exam: x.exam_code, grade: g, subject: sub, school, class_no: cls, student_no: no, mode,
-      my_score: leap.my_score, my_grade: leap.my_grade, target_grade: leap.target_grade, ref_n: leap.ref_n, cuts,
-      items: pick.map(qn => ({ q_no: qn, marked: marks.get(qn) ?? null, answer: K[qn]?.answer ?? null, points: K[qn]?.points ?? null,
+      my_score: leap.my_score, my_grade: leap.my_grade, target_grade: leap.target_grade, ref_n: leap.ref_n, cuts: stats.cuts, n_students: stats.n_students,
+      items: pick.map(qn => ({ q_no: qn, marked: M.get(qn) ?? null, answer: K[qn]?.answer ?? null, points: K[qn]?.points ?? null,
         area: U[qn]?.area ?? null, unit: U[qn]?.unit ?? null, nat: N[qn] ?? null,
-        ref_rate: leap.items.find(i => i.q_no === qn)?.ref_rate ?? null })),
+        ref_rate: leap.items.find(i => i.q_no === qn)?.ref_rate ?? null, all_rate: stats.items[qn]?.all ? +(stats.items[qn].all[1] / stats.items[qn].all[0]).toFixed(4) : null })),
     };
   }
 
   fail(404, '없는 API입니다: ' + r);
+}
+
+// ── 등급별 문항 정답률 표(stats_cache) ──────────────
+// 회차·학년·과목당 한 번: 전체 응답을 읽어 채점 → 등급컷(정답 DB 서버 grade_cuts)으로 등급 → 문항별·등급별 정답 수. 결과는 JSON 한 행.
+async function computeStats(env, exam_code, g, sub) {
+  const rows = async (sql, ...p) => (await env.DB.prepare(sql).bind(...p).all()).results;
+  const keys = await rows('select subject, q_no, answer, points, q_type, unit from answer_keys where exam_code = ? and grade = ? and subject = ?', exam_code, g, sub);
+  const raw = await rows(`select s.school_code, s.subject, r.grade, r.class_no, r.student_no, r.q_no, r.marked
+    from responses r join submissions s on s.id = r.submission_id where s.exam_code = ? and s.grade = ? and s.subject = ? and s.is_active = 1`, exam_code, g, sub);
+  const ex = encodeURIComponent(toExcelExam(exam_code));
+  // 등급컷을 못 받으면(정답 DB 서버 장애·한도 초과) 표는 만들되 저장하지 않는다 — 빈 컷이 캐시에 굳으면 안 되니까
+  let cutRows = null, cut_error = null;
+  try { cutRows = await sbAll(env, `grade_cuts?select=rank,cut&exam=eq.${ex}&grade=eq.${g}&subject=eq.${encodeURIComponent(sub)}`); } catch (e) { cut_error = e.message; }
+  const st = bandStats(score(raw, keys), sub, Object.fromEntries((cutRows ?? []).map(c => [c.rank, c.cut])));
+  if (cut_error) return { ...st, cut_error };
+  await env.DB.prepare(`insert into stats_cache (exam_code, grade, subject, json) values (?, ?, ?, ?) on conflict (exam_code, grade, subject) do update set json = excluded.json, computed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`)
+    .bind(exam_code, g, sub, JSON.stringify(st)).run();
+  return st;
+}
+async function getStats(env, exam_code, g, sub) {
+  const row = await env.DB.prepare('select json from stats_cache where exam_code = ? and grade = ? and subject = ?').bind(exam_code, g, sub).first();
+  return row ? JSON.parse(row.json) : computeStats(env, exam_code, g, sub);   // 없으면 첫 요청이 만든다(몇 초)
+}
+async function buildStats(env, exam_code) {   // 회차를 닫을 때: 제출이 있는 학년·과목 전부
+  const combos = (await env.DB.prepare('select distinct grade, subject from submissions where exam_code = ? and is_active = 1').bind(exam_code).all()).results;
+  for (const c of combos) { try { await computeStats(env, exam_code, c.grade, c.subject); } catch (e) { console.log('stats', exam_code, c.grade, c.subject, e.message); } }
 }
 
 // body: { exam, groups: [{ grade, subject, row_count, rows: [{grade, class_no, student_no, q_no, marked}] }] }
