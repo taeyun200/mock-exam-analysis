@@ -26,6 +26,28 @@ TAGS = {
 }
 NAT = {"A": "80%↑", "B": "60~80", "C": "40~60", "D": "20~40", "E": "20%↓"}
 CIRC = {str(i + 1): c for i, c in enumerate("①②③④⑤")}
+PAGINATE_JS = """function paginateEn() {
+  for (let pg = document.querySelector('.pg[data-en]'); pg; pg = pg.nextElementSibling) {
+    if (!pg.dataset.en) continue;
+    let guard = 0;
+    while (pg.scrollHeight > pg.clientHeight + 1 && guard++ < 80) {
+      const rows = [...pg.querySelectorAll('table.snt tr')];
+      if (rows.length < 4) break;                                   // 머리글 + 한 쌍은 남긴다
+      let next = pg.nextElementSibling;
+      if (!(next && next.dataset.en && next.dataset.cont && next.dataset.q === pg.dataset.q)) {
+        next = document.createElement('div'); next.className = 'pg'; next.dataset.en = '1'; next.dataset.cont = '1'; next.dataset.q = pg.dataset.q;
+        next.innerHTML = pg.querySelector('.hd').outerHTML.replace('</span>', ' · 지문 해석 이어서</span>') +
+          '<div class=sec>지문 해석 — 한 문장씩 (이어서)</div><table class=snt>' + rows[0].outerHTML + '</table>';
+        pg.after(next);
+      }
+      const tb = next.querySelector('table.snt tr').parentNode;
+      tb.insertBefore(rows[rows.length - 1], tb.children[1]); tb.insertBefore(rows[rows.length - 2], tb.children[1]);
+    }
+  }
+  const byQ = {};
+  document.querySelectorAll('.pg[data-q]').forEach(p => (byQ[p.dataset.q] ??= []).push(p));
+  for (const ps of Object.values(byQ)) if (ps.length % 2) { const b = document.createElement('div'); b.className = 'pg'; b.innerHTML = '<div class=sub>메모</div>'; ps.at(-1).after(b); }
+}"""
 
 CSS = """
 @page{size:A4;margin:12mm}
@@ -55,6 +77,7 @@ ol.cause{columns:2;column-gap:8mm;margin:0;padding-left:0;list-style:none;font-s
 .noprint{text-align:center;margin:10px;font-size:13px}
 .chk{font-size:11.5px;line-height:1.7} .chk div{border-bottom:1px dotted #cbd5e1} .chk u{display:inline-block;min-width:9mm;border-bottom:1px solid #777;text-decoration:none}
 table.voc td{height:9mm} .box ol.cause{columns:1} .box .sec{margin:4px 0 2px}
+.pg[data-en]>*{flex-shrink:0}   /* 문항 그림·표가 쪽 높이에 맞춰 줄어들지 않게 — 넘쳐야 paginateEn이 다음 쪽으로 옮긴다 */
 table.snt td{vertical-align:top;text-align:left;padding:2px 5px} table.snt td.n{width:7mm;text-align:center;color:#6b7280} table.snt td.en{font-family:Georgia,"Times New Roman",serif;font-size:10.5px;line-height:1.35} table.snt td.ko{height:9mm;background:#fbfcfe}
 """
 
@@ -133,28 +156,11 @@ def build(folder, wrong, mine=None, sid="", name="", out=None, units=None, leap=
                 + "<tr><td></td><td></td><td></td></tr>" * 10 + "</table>"
                 "<div class=boxes style='margin-top:5px;min-height:30mm'><div class=box><div class=t>EBS 오답 강의 정리<small>강의에서 짚은 포인트 · 내가 몰랐던 것 · 다시 풀어 본 결과</small></div><div class=lines>" + "<i></i>" * 7 + "</div></div></div>")
         sents = q.get("sentences") or (ps.get(q.get("passage")) or {}).get("sentences") or []
-        # 쪽 나누기(높이 어림, mm): 문항 그림 높이 + 문장마다 (글줄 수 × 4.6 + 2) + 해석 줄 9
-        hh = sum(min(128, Image.open(os.path.join(folder, f)).size[1] * 101 / Image.open(os.path.join(folder, f)).size[0]) for f in q["images"])
-        avail = 270 - 8 - 10 - max(92, hh) - 6
-        est = lambda x: -(-len(x) // 105) * 4.6 + 1.5 + 9
-        chunks, cur, used = [], [], 0
-        for x in sents:
-            if cur and used + est(x) > avail:
-                chunks.append(cur); cur, used, avail = [], 0, 270 - 8 - 10 - 6
-            cur.append(x); used += est(x)
-        chunks.append(cur)
-        n0 = 1
-        pages = []
-        for ci, c in enumerate(chunks):
-            rows = "".join(f"<tr><td class=n rowspan=2>{n0 + r}</td><td class=en>{html.escape(x)}</td></tr><tr><td class=ko></td></tr>" for r, x in enumerate(c))
-            n0 += len(c)
-            tbl = (f"<div class=sec>지문 해석 — 한 문장씩{' (이어서)' if ci else ''} <small>끊긴 문장부터 · 사전 없이 먼저 쓰고 해설지 해석과 비교해 틀린 곳에 표시</small></div><table class=snt>{rows}</table>") if c else ""
-            pages.append((hd() + top if ci == 0 else hd(" · 지문 해석 이어서")) + tbl)
-        if avail - used >= 135: pages[-1] += tail
-        else: pages.append(hd(" · 단어·관용어 / EBS") + tail)
-        pages = [x + "</div>" for x in pages]   # 쪽마다 닫는다
-        if len(pages) % 2: pages.append(BLANK)
-        return "".join(pages)
+        rows = "".join(f"<tr><td class=n rowspan=2>{r + 1}</td><td class=en>{html.escape(x)}</td></tr><tr><td class=ko></td></tr>" for r, x in enumerate(sents))
+        tbl = f"<div class=sec>지문 해석 — 한 문장씩 <small>끊긴 문장부터 · 사전 없이 먼저 쓰고 해설지 해석과 비교해 틀린 곳에 표시</small></div><table class=snt><tr><th style='width:7mm'></th><th class=l>문장 / 내 해석</th></tr>{rows}</table>" if sents else ""
+        # 앞면: 문항 + 읽기 점검 + 문장 전부. 넘치는 문장은 paginateEn()(브라우저)이 실제 높이를 재서 다음 쪽으로 옮긴다. 뒷면: 단어·관용어 + EBS
+        return (hd().replace("<div class=pg>", f"<div class=pg data-en=1 data-q={no}>", 1) + top + tbl + "</div>"
+                + hd(" · 단어·관용어 / EBS").replace("<div class=pg>", f"<div class=pg data-q={no}>", 1) + tail + "</div>")
 
     body, done = [], set()
     for no in wrong:
@@ -181,7 +187,7 @@ def build(folder, wrong, mine=None, sid="", name="", out=None, units=None, leap=
             "<h2>3. 원인 집계</h2><div class=box2>표지의 '원인 번호'를 세어 가장 많은 유형 두 개: 1) ________ 2) ________ · 지난 회차와 같은 유형이 있나? ○예 ○아니오</div>"
             "<h2>4. 다음 시험까지 바꿀 것 두 가지</h2><div class=box2>1)<br><br>2)</div></div>")
     page = (f"<!doctype html><html lang=ko><meta charset=utf-8><title>{title} 오답노트</title><style>{CSS}</style><body>"
-            f"<div class=noprint><button onclick=print()>🖨 인쇄 / PDF 저장</button> &nbsp;<span style='color:#6b7280'>인쇄 대화상자에서 용지 A4 · 여백 '기본' · 배율 100%</span></div>{cover}{''.join(body)}{wrap}</body></html>")
+            f"<div class=noprint><button onclick=print()>🖨 인쇄 / PDF 저장</button> &nbsp;<span style='color:#6b7280'>인쇄 대화상자에서 용지 A4 · 여백 '기본' · 배율 100%</span></div>{cover}{''.join(body)}{wrap}<script>{PAGINATE_JS}\nwindow.addEventListener('load', paginateEn);</script></body></html>")
 
     root = os.path.dirname(os.path.dirname(os.path.abspath(folder)))
     out = out or os.path.join(root, "오답노트_샘플", f"{os.path.basename(os.path.normpath(folder))}_{sid or '샘플'}.html")
