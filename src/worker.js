@@ -319,16 +319,17 @@ async function route(method, url, body, me, env, ctx) {
     if (mode === 'leap' && !Object.keys(stats.cuts).length) fail(409, '이 회차·과목의 EBS 등급컷이 아직 없어 1등급 업 문항을 계산할 수 없습니다');
     const leap = leapFromStats(stats, mine, sub, 6);
     const ex = encodeURIComponent(toExcelExam(x.exam_code)), es = encodeURIComponent(sub);
+    let sb_error = null;   // 영역·단원·전국 정답률은 정답 DB 서버에서 — 못 받으면 빈 칸으로 두되 이유를 같이 보낸다(조용히 비지 않게)
     const [units, nat] = await Promise.all([
-      sbAll(env, `item_units?select=q_no,unit,area&exam=eq.${ex}&grade=eq.${g}&subject=eq.${es}`).catch(() => []),
-      sbAll(env, `official_items?select=q_no,difficulty&exam=eq.${ex}&grade=eq.${g}&subject=eq.${es}&difficulty=not.is.null`).catch(() => []),
+      sbAll(env, `item_units?select=q_no,unit,area&exam=eq.${ex}&grade=eq.${g}&subject=eq.${es}`).catch(e => { sb_error = e.message; return []; }),
+      sbAll(env, `official_items?select=q_no,difficulty&exam=eq.${ex}&grade=eq.${g}&subject=eq.${es}&difficulty=not.is.null`).catch(e => { sb_error = e.message; return []; }),
     ]);
     const U = Object.fromEntries(units.map(u => [u.q_no, u])), N = Object.fromEntries(nat.map(n => [n.q_no, n.difficulty]));
     const K = Object.fromEntries(keys.map(k => [k.q_no, k])), M = new Map(mine.map(c => [c.q_no, c.marked]));
     const pick = mode === 'leap' ? leap.items.map(i => i.q_no) : leap.wrong;
     return {
       exam: x.exam_code, grade: g, subject: sub, school, class_no: cls, student_no: no, mode,
-      my_score: leap.my_score, my_grade: leap.my_grade, target_grade: leap.target_grade, ref_n: leap.ref_n, cuts: stats.cuts, n_students: stats.n_students,
+      my_score: leap.my_score, my_grade: leap.my_grade, target_grade: leap.target_grade, ref_n: leap.ref_n, cuts: stats.cuts, n_students: stats.n_students, sb_error,
       items: pick.map(qn => ({ q_no: qn, marked: M.get(qn) ?? null, answer: K[qn]?.answer ?? null, points: K[qn]?.points ?? null,
         area: U[qn]?.area ?? null, unit: U[qn]?.unit ?? null, nat: N[qn] ?? null,
         ref_rate: leap.items.find(i => i.q_no === qn)?.ref_rate ?? null, all_rate: stats.items[qn]?.all ? +(stats.items[qn].all[1] / stats.items[qn].all[0]).toFixed(4) : null })),
