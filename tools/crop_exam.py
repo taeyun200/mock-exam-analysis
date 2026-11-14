@@ -131,16 +131,8 @@ def identify(doc, override):
     return e
 
 
-def crop(pdf, outdir, zoom=2.5, override={}):
-    os.makedirs(outdir, exist_ok=True)
-    doc = pymupdf.open(pdf)
-    exam = identify(doc, override)
-    title = f"{exam.get('year', '?')}학년도 {exam.get('month', '?')}월 고{exam.get('grade', '?')} 전국연합학력평가 {exam.get('subject', '?')}"
-    margins = detect_margins(doc, RE_Q, 2)
-    if len(margins) < 2:
-        raise SystemExit("문항 줄을 찾지 못해 단 여백을 정할 수 없습니다: " + pdf)
-
-    # 1) 읽는 순서대로 조각 생성
+def segment(doc, margins):
+    """읽는 순서대로 조각(세트 지문·문항) 목록: [{kind, label, pieces:[(쪽, 사각형)]}]. 그림 없이 글자만 쓸 때(en_sentences.py)도 부른다."""
     segments, cur, expect = [], None, [1]
     for pno, page in enumerate(doc):
         for rect, col, margin in columns(page, margins):
@@ -154,6 +146,19 @@ def crop(pdf, outdir, zoom=2.5, override={}):
                 y = my - 2
             if cur:
                 cur["pieces"].append((pno, pymupdf.Rect(rect.x0, y, rect.x1, rect.y1)))
+    return segments
+
+
+def crop(pdf, outdir, zoom=2.5, override={}):
+    os.makedirs(outdir, exist_ok=True)
+    doc = pymupdf.open(pdf)
+    exam = identify(doc, override)
+    title = f"{exam.get('year', '?')}학년도 {exam.get('month', '?')}월 고{exam.get('grade', '?')} 전국연합학력평가 {exam.get('subject', '?')}"
+    margins = detect_margins(doc, RE_Q, 2)
+    if len(margins) < 2:
+        raise SystemExit("문항 줄을 찾지 못해 단 여백을 정할 수 없습니다: " + pdf)
+
+    segments = segment(doc, margins)
 
     # 2) 렌더링
     mat, manifest, cur_set = pymupdf.Matrix(zoom, zoom), {"exam": exam, "passages": [], "questions": []}, None

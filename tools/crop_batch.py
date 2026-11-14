@@ -74,6 +74,7 @@ def main(folders):
             note = ""
             if os.path.exists(sol):
                 rc, out = run("crop_sol.py", sol, dst)
+                if subject == "영어" and rc == 0: run("en_sentences.py", mun, dst)   # 지문을 한 문장씩 (오답노트 뒷면)
                 if rc: note = " · 해설 실패: " + out[-120:].replace("\n", " ")
             else:
                 note = " · 해설지 없음"
